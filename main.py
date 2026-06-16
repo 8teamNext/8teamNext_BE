@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any
-from fastapi import FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
+from flask import Flask, request, jsonify, abort
+from flask_cors import CORS
 
 from models import (
     GithubAnalysisRequest, GithubAnalysisResponse,
@@ -21,20 +21,10 @@ from services.resume_matcher import match_resume_github
 from services.interview_gen import generate_interview_questions
 from services.cover_letter_cmp import compare_cover_letters
 
-app = FastAPI(
-    title="AI Career Copilot API",
-    description="Backend service providing AI-driven career gap analysis and resume feedback.",
-    version="1.0.0"
-)
+app = Flask(__name__)
 
-# Configure CORS so Vite React frontend (typically port 5173) can access endpoints
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # For local development convenience
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure CORS
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # In-memory session store
 db_profile = UserProfile(
@@ -84,13 +74,15 @@ db_history: List[AnalysisHistoryItem] = [
 
 # --- Endpoints ---
 
-@app.get("/")
+@app.route("/", methods=["GET"])
 def read_root():
-    return {"message": "Welcome to AI Career Copilot API. Visit /docs for documentation."}
+    return jsonify({"message": "Welcome to AI Career Copilot API. Visit /docs for documentation."})
 
-@app.post("/api/analyze/github", response_model=GithubAnalysisResponse)
-def api_analyze_github(payload: GithubAnalysisRequest):
+@app.route("/api/analyze/github", methods=["POST"])
+def api_analyze_github():
     try:
+        data = request.get_json()
+        payload = GithubAnalysisRequest.model_validate(data)
         response = analyze_github(payload.repo_urls, payload.job_urls)
         
         # Save to history
@@ -102,16 +94,16 @@ def api_analyze_github(payload: GithubAnalysisRequest):
         )
         db_history.insert(0, new_hist)
         
-        return response
+        return jsonify(response.model_dump())
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"GitHub analysis failed: {str(e)}"
-        )
+        return jsonify({"detail": f"GitHub analysis failed: {str(e)}"}), 500
 
-@app.post("/api/analyze/gap", response_model=GapAnalysisResponse)
-def api_analyze_gap(payload: GapAnalysisRequest):
+@app.route("/api/analyze/gap", methods=["POST"])
+def api_analyze_gap():
     try:
+        data = request.get_json()
+        payload = GapAnalysisRequest.model_validate(data)
+        
         # If resume_text is empty, fallback to the saved profile resume
         resume = payload.resume_text if payload.resume_text else db_profile.default_resume
         
@@ -126,16 +118,15 @@ def api_analyze_gap(payload: GapAnalysisRequest):
         )
         db_history.insert(0, new_hist)
         
-        return response
+        return jsonify(response.model_dump())
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Gap analysis failed: {str(e)}"
-        )
+        return jsonify({"detail": f"Gap analysis failed: {str(e)}"}), 500
 
-@app.post("/api/analyze/resume-github", response_model=ResumeGithubResponse)
-def api_analyze_resume_github(payload: ResumeGithubRequest):
+@app.route("/api/analyze/resume-github", methods=["POST"])
+def api_analyze_resume_github():
     try:
+        data = request.get_json()
+        payload = ResumeGithubRequest.model_validate(data)
         resume = payload.resume_text if payload.resume_text else db_profile.default_resume
         response = match_resume_github(
             resume,
@@ -153,16 +144,15 @@ def api_analyze_resume_github(payload: ResumeGithubRequest):
         )
         db_history.insert(0, new_hist)
         
-        return response
+        return jsonify(response.model_dump())
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Resume-GitHub linkage analysis failed: {str(e)}"
-        )
+        return jsonify({"detail": f"Resume-GitHub linkage analysis failed: {str(e)}"}), 500
 
-@app.post("/api/analyze/interview-questions", response_model=InterviewGenResponse)
-def api_analyze_interview_questions(payload: InterviewGenRequest):
+@app.route("/api/analyze/interview-questions", methods=["POST"])
+def api_analyze_interview_questions():
     try:
+        data = request.get_json()
+        payload = InterviewGenRequest.model_validate(data)
         cover_letter = payload.cover_letter if payload.cover_letter else db_profile.default_cover_letter
         response = generate_interview_questions(cover_letter)
         
@@ -175,16 +165,15 @@ def api_analyze_interview_questions(payload: InterviewGenRequest):
         )
         db_history.insert(0, new_hist)
         
-        return response
+        return jsonify(response.model_dump())
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Interview question generation failed: {str(e)}"
-        )
+        return jsonify({"detail": f"Interview question generation failed: {str(e)}"}), 500
 
-@app.post("/api/analyze/cover-letter-compare", response_model=CoverLetterCompareResponse)
-def api_analyze_cover_letter_compare(payload: CoverLetterCompareRequest):
+@app.route("/api/analyze/cover-letter-compare", methods=["POST"])
+def api_analyze_cover_letter_compare():
     try:
+        data = request.get_json()
+        payload = CoverLetterCompareRequest.model_validate(data)
         response = compare_cover_letters(payload.original_text, payload.improved_text)
         
         # Save to history
@@ -196,17 +185,16 @@ def api_analyze_cover_letter_compare(payload: CoverLetterCompareRequest):
         )
         db_history.insert(0, new_hist)
         
-        return response
+        return jsonify(response.model_dump())
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Cover letter comparison failed: {str(e)}"
-        )
+        return jsonify({"detail": f"Cover letter comparison failed: {str(e)}"}), 500
 
-@app.post("/api/analyze/unified", response_model=UnifiedAnalysisResponse)
-def api_analyze_unified(payload: UnifiedAnalysisRequest):
+@app.route("/api/analyze/unified", methods=["POST"])
+def api_analyze_unified():
     try:
         from models import UnifiedGithubPart, UnifiedResumePart, UnifiedGapPart
+        data = request.get_json()
+        payload = UnifiedAnalysisRequest.model_validate(data)
         
         # Use URLs provided by user
         job_urls = payload.job_urls if payload.job_urls else ["https://toss.im/career/job-detail/backend-developer"]
@@ -281,31 +269,35 @@ def api_analyze_unified(payload: UnifiedAnalysisRequest):
         )
         db_history.insert(0, new_hist)
         
-        return response
+        return jsonify(response.model_dump())
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unified career analysis failed: {str(e)}"
-        )
+        return jsonify({"detail": f"Unified career analysis failed: {str(e)}"}), 500
 
 # --- Profile and History Session endpoints ---
 
-@app.get("/api/profile", response_model=UserProfile)
+@app.route("/api/profile", methods=["GET"])
 def get_profile():
-    return db_profile
+    return jsonify(db_profile.model_dump())
 
-@app.post("/api/profile", response_model=UserProfile)
-def update_profile(profile: UserProfile):
+@app.route("/api/profile", methods=["POST"])
+def update_profile():
     global db_profile
-    db_profile = profile
-    return db_profile
+    try:
+        data = request.get_json()
+        db_profile = UserProfile.model_validate(data)
+        return jsonify(db_profile.model_dump())
+    except Exception as e:
+        return jsonify({"detail": f"Profile update failed: {str(e)}"}), 400
 
-@app.get("/api/history", response_model=List[AnalysisHistoryItem])
+@app.route("/api/history", methods=["GET"])
 def get_history():
-    return db_history
+    return jsonify([item.model_dump() for item in db_history])
 
-@app.delete("/api/history/{id}")
-def delete_history_item(id: str):
+@app.route("/api/history/<id>", methods=["DELETE"])
+def delete_history_item(id):
     global db_history
     db_history = [item for item in db_history if item.id != id]
-    return {"status": "success", "message": "History item deleted"}
+    return jsonify({"status": "success", "message": "History item deleted"})
+
+if __name__ == '__main__':
+    app.run(port=8000, debug=True)
