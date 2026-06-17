@@ -299,5 +299,6 @@ def delete_history_item(id):
     db_history = [item for item in db_history if item.id != id]
     return jsonify({"status": "success", "message": "History item deleted"})
 
+
 if __name__ == '__main__':
     app.run(port=8000, debug=True)
