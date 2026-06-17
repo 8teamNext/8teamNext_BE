@@ -18,6 +18,7 @@ from models import (
 from services.github_analyzer import analyze_github
 from services.gap_analyzer import analyze_gap
 from services.resume_matcher import match_resume_github
+from services.resume_analysis import analyze_resume_github, extract_pdf_text
 from services.interview_gen import generate_interview_questions
 from services.cover_letter_cmp import compare_cover_letters
 
@@ -128,9 +129,8 @@ def api_analyze_resume_github():
         data = request.get_json()
         payload = ResumeGithubRequest.model_validate(data)
         resume = payload.resume_text if payload.resume_text else db_profile.default_resume
-        response = match_resume_github(
+        response = analyze_resume_github(
             resume,
-            payload.resume_url,
             payload.github_username,
             payload.tech_stack
         )
@@ -147,6 +147,26 @@ def api_analyze_resume_github():
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"Resume-GitHub linkage analysis failed: {str(e)}"}), 500
+
+
+@app.route("/api/parse-resume", methods=["POST"])
+def api_parse_resume():
+    if 'file' not in request.files:
+        return jsonify({"detail": "파일이 없습니다."}), 400
+    f = request.files['file']
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    if ext not in ('pdf', 'txt', 'md'):
+        return jsonify({"detail": "파일 양식을 확인해주세요. (지원 형식: PDF, TXT, MD)"}), 400
+    if ext != 'pdf':
+        return jsonify({"detail": "파일 양식을 확인해주세요. 텍스트 파일은 브라우저에서 직접 읽습니다."}), 400
+    try:
+        text = extract_pdf_text(f.read())
+        if not text:
+            return jsonify({"detail": "PDF에서 텍스트를 추출할 수 없습니다. 스캔 이미지 PDF는 지원되지 않습니다."}), 422
+        return jsonify({"text": text})
+    except Exception as e:
+        return jsonify({"detail": f"PDF 파싱 실패: {str(e)}"}), 500
+
 
 @app.route("/api/analyze/interview-questions", methods=["POST"])
 def api_analyze_interview_questions():
