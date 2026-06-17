@@ -1,2 +1,5 @@
 # 개인정보
 .env
+
+# __pycache__
+__pycache__
