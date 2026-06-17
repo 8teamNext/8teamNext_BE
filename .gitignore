@@ -1,2 +1,18 @@
-# 개인정보
+# Debug files
+debug.html
+playwright_debug.html
+
+# Python cache
+__pycache__/
+*.py[cod]
+*__pycache__/
+# Environment
 .env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
