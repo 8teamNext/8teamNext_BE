@@ -1,0 +1,26 @@
+name: CD Deploy
+
+on:
+  push:
+    branches:
+      - main
+      # 임의로 테스트를 위해 제 브랜치 포함 -> 추후 포트랑 다 맞추면 다시 원복할 생각입니다.
+      - leancage-analysis
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /var/www/flask/8teamNext_BE
+            git pull origin main
+            npm install -r requirements.txt
+            sudo systemctl daemon-reload
+            sudo systemctl restart flask
