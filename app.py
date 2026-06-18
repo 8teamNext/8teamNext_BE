@@ -3,6 +3,9 @@ from datetime import datetime
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
+from services.crawler import crawler_bp 
+
+
 
 from models import (
     GithubAnalysisRequest, GithubAnalysisResponse,
@@ -78,6 +81,12 @@ db_history: List[AnalysisHistoryItem] = [
 @app.route("/", methods=["GET"])
 def read_root():
     return jsonify({"message": "Welcome to AI Career Copilot API. Visit /docs for documentation."})
+
+# @app.route('/api/recruit', methods=['GET'])
+# def get_recruitment():
+
+CORS(app, resources={r"/*": {"origins": "*"}})
+app.register_blueprint(crawler_bp)
 
 @app.route("/api/analyze/github", methods=["POST"])
 def api_analyze_github():
