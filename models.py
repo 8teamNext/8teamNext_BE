@@ -89,6 +89,7 @@ class InterviewQuestion(BaseModel):
     intent: str  # why the interviewer asks this
     suggested_keywords: List[str]
     sample_answer_tip: str
+    sample_answer: str
 
 class InterviewGenResponse(BaseModel):
     questions: List[InterviewQuestion]
