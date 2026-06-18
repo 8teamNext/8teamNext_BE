@@ -443,7 +443,7 @@ if __name__ == "__main__":
     import asyncio, json, sys
 #공고url
     url = sys.argv[1] if len(sys.argv) > 1 else (
-        ""
+        "https://www.jobkorea.co.kr/Recruit/GI_Read/49354072?Oem_Code=C1&rPageCode=TL&sc=416"
     )
 
     async def main():
