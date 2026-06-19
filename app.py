@@ -1,10 +1,14 @@
+from dotenv import load_dotenv
+load_dotenv()
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 from services.crawler import crawler_bp 
-
+from services.github_analyzer import analyze_github
+from services.github_service import test_github
+from services.llm_service import infer_skills
 
 
 from models import (
@@ -78,7 +82,7 @@ db_history: List[AnalysisHistoryItem] = [
 
 # --- Endpoints ---
 
-@app.route("/", methods=["GET"])
+@app.route("/api", methods=["GET"])
 def read_root():
     return jsonify({"message": "Welcome to AI Career Copilot API. Visit /docs for documentation."})
 
@@ -217,6 +221,33 @@ def api_analyze_cover_letter_compare():
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"Cover letter comparison failed: {str(e)}"}), 500
+
+@app.route("/api/github/preview", methods=["GET"])
+async def api_github_preview():
+    username = request.args.get("username", "").strip()
+
+    if not username:
+        return jsonify({"error": "username 파라미터가 필요합니다."}), 400
+
+    github_result = await test_github(username)
+
+    if github_result.get("error"):
+        status = 404 if "찾을 수 없습니다" in github_result["error"] else 400
+        return jsonify({"error": github_result["error"]}), status
+
+    skill_result = await infer_skills(
+        username=username,
+        languages=github_result["languages"],
+        topics=github_result["topics"],
+    )
+
+    return jsonify({
+        "username": username,
+        "confirmed_skills": skill_result["confirmed"],
+        "inferred_skills": skill_result["inferred"],
+        "raw_languages": github_result["languages"],
+    })
+
 
 @app.route("/api/analyze/unified", methods=["POST"])
 def api_analyze_unified():
