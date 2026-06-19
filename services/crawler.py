@@ -43,7 +43,7 @@ async def _parse_with_index(index: int, url: str) -> dict:
         }
 
 
-@crawler_bp.route("/crawl", methods=["POST"])
+@crawler_bp.route("/api/crawl", methods=["POST"])
 async def crawl():
     data = request.get_json(silent=True)
 
