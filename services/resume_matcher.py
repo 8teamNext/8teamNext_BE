@@ -2,7 +2,7 @@ from typing import List
 from models import ResumeGithubResponse
 from services.gap_analyzer import parse_skills_from_text
 
-def match_resume_github(
+async def match_resume_github(
     resume_text: str,
     resume_url: str,
     github_username: str,

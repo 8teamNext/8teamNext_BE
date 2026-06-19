@@ -18,7 +18,7 @@ def extract_name_from_url(url: str, default: str) -> str:
     except Exception:
         return default
 
-def analyze_github(repo_urls: List[str], job_urls: List[str]) -> GithubAnalysisResponse:
+async def analyze_github(repo_urls: List[str], job_urls: List[str]) -> GithubAnalysisResponse:
     # 1. Infer technologies from repository URLs
     detected_skills = set()
     repos = []

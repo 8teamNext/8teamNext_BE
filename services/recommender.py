@@ -1,7 +1,7 @@
 from typing import List
 from models import RecommendedProject
 
-def recommend_projects(missing_skills: List[str]) -> List[RecommendedProject]:
+async def recommend_projects(missing_skills: List[str]) -> List[RecommendedProject]:
     recommendations = []
     
     missing_lower = [s.lower() for s in missing_skills]
