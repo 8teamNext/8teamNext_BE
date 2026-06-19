@@ -26,7 +26,7 @@ def parse_skills_from_text(text: str) -> List[str]:
             found.append(tech)
     return found
 
-def analyze_gap(repo_urls: List[str], resume_text: str, job_urls: List[str]) -> GapAnalysisResponse:
+async def analyze_gap(repo_urls: List[str], resume_text: str, job_urls: List[str]) -> GapAnalysisResponse:
     # 1. Gather User Skills
     user_skills = set()
     
@@ -124,7 +124,7 @@ def analyze_gap(repo_urls: List[str], resume_text: str, job_urls: List[str]) -> 
     priority_skills = missing_skills[:3]
     
     # Get project recommendations
-    recommended_projects = recommend_projects(missing_skills)
+    recommended_projects = await recommend_projects(missing_skills)
     
     return GapAnalysisResponse(
         proven_skills=proven_skills,
