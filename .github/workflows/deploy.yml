@@ -1,0 +1,25 @@
+name: Deploy
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /var/www/flask/8teamNext_BE
+            git pull origin main
+            npm install -r requirements.txt
+            sudo systemctl daemon-reload
+            sudo systemctl restart flask

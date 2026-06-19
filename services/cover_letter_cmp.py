@@ -1,7 +1,7 @@
 from typing import List, Dict
 from models import CoverLetterCompareResponse
 
-def compare_cover_letters(original_text: str, improved_text: str) -> CoverLetterCompareResponse:
+async def compare_cover_letters(original_text: str, improved_text: str) -> CoverLetterCompareResponse:
     # Analyze word lengths
     orig_words = len(original_text.split())
     imp_words = len(improved_text.split())

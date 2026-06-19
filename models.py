@@ -107,8 +107,7 @@ class CoverLetterCompareResponse(BaseModel):
 
 # 6. User Profile & Dashboard Models
 class UserProfile(BaseModel):
-    email: str
-    name: str
+    name: str = ""
     github_username: Optional[str] = ""
     default_resume: Optional[str] = ""
     default_cover_letter: Optional[str] = ""
