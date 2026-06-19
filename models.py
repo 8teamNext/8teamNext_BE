@@ -82,9 +82,11 @@ class ResumeGithubResponse(BaseModel):
 # 4. AI Interview Question Generator Models
 class InterviewGenRequest(BaseModel):
     cover_letter: str
+    job_posting: Optional[str] = ""
 
 class InterviewQuestion(BaseModel):
     id: int
+    category: str  # 기술 구현 | 트러블슈팅 | 시스템 설계 | 협업·소통 | CS 기초 | DevOps
     question: str
     intent: str  # why the interviewer asks this
     suggested_keywords: List[str]

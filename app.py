@@ -22,7 +22,7 @@ from services.github_analyzer import analyze_github
 from services.gap_analyzer import analyze_gap
 from services.resume_matcher import match_resume_github
 from services.resume_analysis import analyze_resume_github, extract_pdf_text, validate_resume_text
-from services.interview_gen import generate_interview_questions
+from services.interview_gen_openai import generate_interview_questions
 from services.cover_letter_cmp import compare_cover_letters
 
 app = Flask(__name__)
@@ -190,9 +190,9 @@ def api_analyze_interview_questions():
         data = request.get_json()
         payload = InterviewGenRequest.model_validate(data)
         cover_letter = payload.cover_letter if payload.cover_letter else db_profile.default_cover_letter
-        response = generate_interview_questions(cover_letter)
-        
-        # Save to history
+        job_posting = payload.job_posting or ""
+        response = generate_interview_questions(cover_letter, job_posting)
+
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",
             type="interview",
@@ -200,8 +200,10 @@ def api_analyze_interview_questions():
             summary=f"면접 질문 생성: {len(response.questions)}개 질문 추출"
         )
         db_history.insert(0, new_hist)
-        
+
         return jsonify(response.model_dump())
+    except ValueError as e:
+        return jsonify({"detail": str(e)}), 400
     except Exception as e:
         return jsonify({"detail": f"Interview question generation failed: {str(e)}"}), 500
 
