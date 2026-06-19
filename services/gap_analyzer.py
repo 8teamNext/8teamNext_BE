@@ -1,30 +1,7 @@
-import re
-import urllib.parse
 from typing import List
 from models import GapAnalysisResponse, CompanyRanking
-from services.github_analyzer import extract_name_from_url
+from services.text_utils import parse_skills_from_text, extract_name_from_url
 from services.recommender import recommend_projects
-
-# List of tech keywords to extract from resume text
-TECH_GLOSSARY = [
-    "Java", "Spring Boot", "Spring Data JPA", "JPA", "Hibernate", "Kotlin", "Swift", "Dart", "Flutter",
-    "Python", "Django", "FastAPI", "Flask", "Go", "C++", "JavaScript", "TypeScript",
-    "React.js", "React", "Next.js", "Vue.js", "Angular", "Node.js", "Express", "NestJS",
-    "MySQL", "PostgreSQL", "MongoDB", "Redis", "Oracle", "Docker", "Kubernetes",
-    "AWS", "GCP", "Azure", "GitHub Actions", "CI/CD", "Git", "HTML/CSS"
-]
-
-def parse_skills_from_text(text: str) -> List[str]:
-    if not text:
-        return []
-    found = []
-    text_lower = text.lower()
-    for tech in TECH_GLOSSARY:
-        # Match word boundaries or special chars like .js / C++ / CI/CD
-        pattern = r'\b' + re.escape(tech.lower()) + r'\b'
-        if re.search(pattern, text_lower):
-            found.append(tech)
-    return found
 
 async def analyze_gap(repo_urls: List[str], resume_text: str, job_urls: List[str]) -> GapAnalysisResponse:
     # 1. Gather User Skills

@@ -15,6 +15,7 @@ class RepoDetail(BaseModel):
     stars: int
     quality_score: int
     description: str
+    commit_count: int = 0
 
 class JobFitDetail(BaseModel):
     job_url: str
@@ -25,13 +26,15 @@ class JobFitDetail(BaseModel):
     missing_skills: List[str]
 
 class GithubAnalysisResponse(BaseModel):
-    portfolio_rating: str  # e.g., "Excellent (A+)", "Good (B)"
-    overall_job_fit: int   # Average percentage
+    portfolio_rating: str
+    overall_job_fit: int
     strong_skills: List[str]
     weak_skills: List[str]
     readme_suggestions: List[str]
     repo_details: List[RepoDetail]
     job_comparisons: List[JobFitDetail]
+    total_commits: int = 0
+    active_weeks: int = 0   # 최근 52주 중 커밋이 있는 주 수 (잔디)
 
 # 2. Gap Analysis Models
 class GapAnalysisRequest(BaseModel):
@@ -126,6 +129,7 @@ class UnifiedAnalysisRequest(BaseModel):
 
 class UnifiedGithubPart(BaseModel):
     repo_count: int
+    total_commits: int
     tech_stack: List[str]
     readme_quality: str
     project_completeness: str
@@ -144,8 +148,13 @@ class UnifiedGapPart(BaseModel):
     learning_roadmap: List[str]
 
 class UnifiedAnalysisResponse(BaseModel):
-    overall_score: int
     portfolio_rating: str
+    overall_match_pct: int      # 전체 매칭 비율 (가중 평균)
+    skill_match_pct: int        # 기술스택 일치도 (GitHub ∩ 이력서 / 합집합 %)
+    active_weeks: int           # 깃 커밋 활동 주 수 (최근 52주)
+    total_commits: int          # 전체 커밋 수
+    repo_coverage_pct: int      # 레포 기술 커버리지 (이력서 기술 사용 레포 비율 %)
+    repo_count: int             # 공개 레포지토리 수
     github_analysis: UnifiedGithubPart
     resume_analysis: UnifiedResumePart
     skill_gap: UnifiedGapPart

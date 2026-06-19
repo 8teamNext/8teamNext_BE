@@ -1,12 +1,13 @@
 import asyncio
 import base64
 import io
+import os
 import json
 import re
 import urllib.request
 from typing import List, Set, Optional
 from models import ResumeGithubResponse
-from services.gap_analyzer import parse_skills_from_text
+from services.text_utils import parse_skills_from_text
 
 
 # ── 이력서 검증 ──────────────────────────────────────────────────────────────
@@ -126,16 +127,17 @@ LANGUAGE_TO_SKILL = {
 
 async def _gh_get(path: str, extra_headers: dict = None) -> Optional[object]:
     def _fetch():
-        req = urllib.request.Request(
-            GITHUB_API_BASE + path,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "spc-resume-analyzer",
-                **(extra_headers or {}),
-            },
-        )
+        token = os.environ.get("GITHUB_TOKEN", "")
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "spc-resume-analyzer",
+            **(extra_headers or {}),
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(GITHUB_API_BASE + path, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=6) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read().decode())
         except Exception:
             return None
