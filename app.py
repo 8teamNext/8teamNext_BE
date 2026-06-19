@@ -1,6 +1,8 @@
 import asyncio
 import uuid
 from datetime import datetime
+from dotenv import load_dotenv
+load_dotenv()
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
@@ -200,21 +202,26 @@ async def api_analyze_unified():
         print(f"username: {username}")
         print(f"resume 앞 100자: {payload.resume_text[:100]}")
 
-        # 1. GitHub 분석 + Gap 분석 병렬 실행
-        github_res, gap_res = await asyncio.gather(
+        from services.llm_analyzer import extract_skills_from_resume, generate_analysis_comment
+
+        # 1. GitHub 분석 + Gap 분석 + LLM 이력서 기술 추출 병렬 실행
+        github_res, gap_res, llm_resume_skills = await asyncio.gather(
             analyze_github([payload.github_url], job_urls),
             analyze_gap([payload.github_url], payload.resume_text, job_urls),
+            extract_skills_from_resume(payload.resume_text),
         )
         print(f"github strong_skills: {github_res.strong_skills}")
         print(f"github repo_details 수: {len(github_res.repo_details)}")
         print(f"active_weeks: {github_res.active_weeks}, total_commits: {github_res.total_commits}")
+        print(f"LLM 이력서 기술 추출: {llm_resume_skills}")
 
-        # 2. 이력서-GitHub 기술 대조
+        # 2. 이력서-GitHub 기술 대조 (LLM 추출 기술 우선, 없으면 키워드 매칭 폴백)
         resume_res = await match_resume_github(
             payload.resume_text,
             None,
             username,
             github_res.strong_skills,
+            llm_skills=llm_resume_skills if llm_resume_skills else None,
         )
 
         # GitHub 파트 조립
@@ -289,25 +296,78 @@ async def api_analyze_unified():
         )
         repo_coverage_pct = int(relevant_repos / max(len(github_res.repo_details), 1) * 100)
 
-        # 4. 공개 레포 수 (20개 만점 기준 비율)
+        # 4. 공개 레포 수 (단순 카운트)
         repo_count = len(github_res.repo_details)
-        repo_count_pct = min(int(repo_count / 20 * 100), 100)
 
-        # 전체 매칭 비율 (5개 항목 동일 가중치 20%씩, 기본점수 100% 고정)
+        # 전체 매칭 비율 (3개 항목 동일 가중치 33.3%씩)
         commit_activity_pct = min(int(active_weeks / 52 * 100), 100)
-        base_score_pct = 100
         overall_match_pct = int(
-            (base_score_pct + skill_match_pct + commit_activity_pct + repo_coverage_pct + repo_count_pct) / 5
+            (skill_match_pct + commit_activity_pct + repo_coverage_pct) / 3
         )
 
-        print(f"\n이력서 기술 (정규화): {sorted(resume_skill_set)}")
-        print(f"GitHub 기술 (정규화): {sorted(github_skill_set)}")
-        print(f"교집합: {sorted(intersection)}")
-        print(f"기술스택 일치도:      {skill_match_pct}%  (이력서 기술 {len(resume_skill_set)}개 중 {len(intersection)}개 증명)")
-        print(f"깃 커밋 활동:         {active_weeks}/52주 ({commit_activity_pct}%) · 총 {total_commits}커밋")
-        print(f"레포 기술 커버리지:   {repo_coverage_pct}%  (관련 레포 {relevant_repos}/{repo_count}개)")
-        print(f"공개 레포 수:         {repo_count}개 ({repo_count_pct}%)")
-        print(f"=== 전체 매칭 비율: {overall_match_pct}% ===\n")
+        print("\n+---------------------------------------------+")
+        print("|        [resume-github analysis result]      |")
+        print("+---------------------------------------------+")
+        print(f"| resume skills ({len(resume_skill_set)}): {sorted(resume_skill_set)}")
+        print(f"| github skills ({len(github_skill_set)}): {sorted(github_skill_set)}")
+        print(f"| matched       ({len(intersection)}): {sorted(intersection)}")
+        print("+---------------------------------------------+")
+        print(f"| skill_match_pct    : {skill_match_pct:>3}%  ({len(intersection)}/{len(resume_skill_set)} skills proven)")
+        print(f"| commit_activity_pct: {commit_activity_pct:>3}%  ({active_weeks}/52 weeks, {total_commits} commits)")
+        print(f"| repo_coverage_pct  : {repo_coverage_pct:>3}%  ({relevant_repos}/{repo_count} repos)")
+        print("+---------------------------------------------+")
+        print(f"| service      : resume-github")
+        print(f"| overall_score: {overall_match_pct}%")
+        print("+---------------------------------------------+\n")
+
+        # LLM 총평 생성
+        ai_comment = await generate_analysis_comment(
+            skill_match_pct=skill_match_pct,
+            commit_activity_pct=commit_activity_pct,
+            repo_coverage_pct=repo_coverage_pct,
+            overall_score=overall_match_pct,
+            matched_skills=sorted(intersection),
+            unmatched_skills=sorted(resume_skill_set - github_skill_set),
+            total_commits=total_commits,
+            active_weeks=active_weeks,
+            repo_count=repo_count,
+        )
+        print(f"  [LLM] 총평:\n{ai_comment}\n")
+
+        # 종합 페이지 공통 포맷 조립
+        from models import ComparisonResult, ComparisonRaw, MetricItem
+        comparison_result = ComparisonResult(
+            service="resume-github",
+            overall_score=overall_match_pct,
+            metrics=[
+                MetricItem(
+                    key="skill_match",
+                    label="기술스택 일치도",
+                    score=skill_match_pct,
+                    detail=f"이력서 기술 {len(resume_skill_set)}개 중 {len(intersection)}개 증명"
+                ),
+                MetricItem(
+                    key="commit_activity",
+                    label="깃 커밋 활동",
+                    score=commit_activity_pct,
+                    detail=f"{active_weeks}/52주 · 총 {total_commits}커밋"
+                ),
+                MetricItem(
+                    key="repo_coverage",
+                    label="레포 기술 커버리지",
+                    score=repo_coverage_pct,
+                    detail=f"관련 레포 {relevant_repos}/{repo_count}개"
+                ),
+            ],
+            raw=ComparisonRaw(
+                active_weeks=active_weeks,
+                total_commits=total_commits,
+                repo_count=repo_count,
+                matched_skills=sorted(intersection),
+                unmatched_skills=sorted(resume_skill_set - github_skill_set),
+            ),
+            ai_comment=ai_comment,
+        )
 
         response = UnifiedAnalysisResponse(
             portfolio_rating=github_res.portfolio_rating,
@@ -320,7 +380,8 @@ async def api_analyze_unified():
             github_analysis=github_part,
             resume_analysis=resume_part,
             skill_gap=gap_part,
-            recommended_projects=gap_res.recommended_projects
+            recommended_projects=gap_res.recommended_projects,
+            comparison_result=comparison_result,
         )
 
         # Save to history

@@ -121,7 +121,28 @@ class AnalysisHistoryItem(BaseModel):
     date: str
     summary: str
 
-# 7. Unified Analysis Models
+# 7. 종합 페이지 공통 포맷
+class MetricItem(BaseModel):
+    key: str
+    label: str
+    score: int
+    detail: str
+
+class ComparisonRaw(BaseModel):
+    active_weeks: int
+    total_commits: int
+    repo_count: int
+    matched_skills: List[str]
+    unmatched_skills: List[str]
+
+class ComparisonResult(BaseModel):
+    service: str
+    overall_score: int
+    metrics: List[MetricItem]
+    raw: ComparisonRaw
+    ai_comment: str = ""
+
+# 8. Unified Analysis Models
 class UnifiedAnalysisRequest(BaseModel):
     github_url: str
     resume_text: str
@@ -159,3 +180,4 @@ class UnifiedAnalysisResponse(BaseModel):
     resume_analysis: UnifiedResumePart
     skill_gap: UnifiedGapPart
     recommended_projects: List[RecommendedProject]
+    comparison_result: ComparisonResult  # 종합 페이지 공통 포맷

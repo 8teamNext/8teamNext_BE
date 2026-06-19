@@ -7,10 +7,16 @@ async def match_resume_github(
     resume_text: str,
     resume_url: str,
     github_username: str,
-    github_skills: List[str],  # analyze_github에서 추출한 실제 기술 스택
+    github_skills: List[str],
+    llm_skills: List[str] = None,  # LLM으로 추출한 기술 (없으면 키워드 매칭 사용)
 ) -> ResumeGithubResponse:
-    # 1. 이력서 텍스트에서 기술 추출
-    resume_skills: Set[str] = set(parse_skills_from_text(resume_text))
+    # 1. 이력서 기술 추출: LLM 결과 우선, 없으면 키워드 매칭 폴백
+    if llm_skills:
+        resume_skills: Set[str] = set(llm_skills)
+        print(f"  [resume_matcher] LLM 기술 사용: {sorted(resume_skills)}")
+    else:
+        resume_skills: Set[str] = set(parse_skills_from_text(resume_text))
+        print(f"  [resume_matcher] 키워드 매칭 사용: {sorted(resume_skills)}")
 
     if not resume_skills:
         return ResumeGithubResponse(
