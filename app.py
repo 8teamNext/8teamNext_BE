@@ -52,6 +52,9 @@ def read_root():
 CORS(app, resources={r"/*": {"origins": "*"}})
 app.register_blueprint(crawler_bp)
 
+from services.leancageAnalysisTest import leancage_test_bp
+app.register_blueprint(leancage_test_bp)
+
 @app.route("/api/analyze/github", methods=["POST"])
 async def api_analyze_github():
     try:
