@@ -166,12 +166,14 @@ async def api_analyze():
             username=username,
             languages=github_result["languages"],
             topics=github_result["topics"],
+            package_skills=github_result.get("package_skills", []),
         )
         return {
             "username": username,
             "confirmed_skills": skill_result["confirmed"],
             "inferred_skills": skill_result["inferred"],
             "raw_languages": github_result["languages"],
+            "package_skills": github_result.get("package_skills", []),
             "error": None,
         }
  
@@ -199,6 +201,7 @@ async def api_analyze():
             "confirmed_skills": github_result["confirmed_skills"],
             "inferred_skills": github_result["inferred_skills"],
             "raw_languages": github_result["raw_languages"],
+            "package_skills": github_result.get("package_skills", []),
         },
         "matching": matching,
     })
@@ -341,6 +344,7 @@ async def api_github_preview():
         username=username,
         languages=github_result["languages"],
         topics=github_result["topics"],
+        package_skills=github_result.get("package_skills", []),  # 추가
     )
 
     return jsonify({

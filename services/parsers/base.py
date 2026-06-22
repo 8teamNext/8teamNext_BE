@@ -5,6 +5,8 @@ from typing import Optional
 
 # ── 기술스택 정규화 테이블 ─────────────────────────────────────────────────
 TECH_ALIASES: dict[str, str] = {
+#     "ai":"ai","ai":"pytorch","ai": "tensorflow", "ai":"keras", "ai":"scikit-learn", "ai":"pandas", "ai":"numpy","ai":"langchain", "ai":"openai", "ai":"huggingface", "ai":"mlflow", "ai":"kubeflow",
+# "ai":"llm","ai":"rag",
     "react.js": "React", "reactjs": "React", "react": "React",
     "vue.js": "Vue", "vuejs": "Vue", "vue": "Vue",
     "next.js": "Next.js", "nextjs": "Next.js",
@@ -13,7 +15,7 @@ TECH_ALIASES: dict[str, str] = {
     "typescript": "TypeScript", "ts": "TypeScript",
     "javascript": "JavaScript", "js": "JavaScript",
     "python": "Python",
-    "java": "Java",
+    "java": "Java","Java":"자바","java":"java","java":"Java","자바":"Java","JAVA":"JAVA",
     "kotlin": "Kotlin",
     "swift": "Swift",
     "spring boot": "Spring Boot", "springboot": "Spring Boot",
@@ -49,6 +51,7 @@ TECH_ALIASES: dict[str, str] = {
     "kafka": "Kafka",
     "jenkins": "Jenkins",
     "terraform": "Terraform",
+    
 }
 
 JOB_TYPE_KEYWORDS = {
