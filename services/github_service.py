@@ -3,12 +3,14 @@ GitHub 분석 서비스
 - GitHub REST API로 실제 레포 데이터 수집
 - 언어 비중 계산
 - topics 수집
+- package.json dependencies 수집
 """
 
 import os
 import asyncio
+import base64
+import json
 import httpx
-from typing import Optional
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 BASE_URL = "https://api.github.com"
@@ -18,8 +20,45 @@ HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
 }
 
+# package.json에서 추출할 주요 프레임워크/라이브러리 키워드
+PACKAGE_KEYWORDS = {
+    "react": "React",
+    "react-dom": "React",
+    "next": "Next.js",
+    "vue": "Vue",
+    "nuxt": "Nuxt.js",
+    "angular": "Angular",
+    "@angular/core": "Angular",
+    "svelte": "Svelte",
+    "express": "Node.js",
+    "fastify": "Node.js",
+    "koa": "Node.js",
+    "nest": "NestJS",
+    "@nestjs/core": "NestJS",
+    "django": "Django",
+    "flask": "Flask",
+    "fastapi": "FastAPI",
+    "spring-boot": "Spring Boot",
+    "tailwindcss": "Tailwind CSS",
+    "redux": "React",
+    "zustand": "React",
+    "graphql": "GraphQL",
+    "prisma": "PostgreSQL",
+    "mongoose": "MongoDB",
+    "typeorm": "MySQL",
+    "sequelize": "MySQL",
+    "jest": None,
+    "typescript": "TypeScript",
+    "react-native": "React Native",
+    "expo": "React Native",
+    "electron": None,
+    "vite": None,
+    "webpack": None,
+    "java":"Java",
+}
 
-# 유저 존재 확인 
+
+# ── 유저 존재 확인 ─────────────────────────────────────────────────────────
 async def check_user_exists(client: httpx.AsyncClient, username: str) -> bool:
     try:
         res = await client.get(f"{BASE_URL}/users/{username}", headers=HEADERS)
@@ -28,7 +67,7 @@ async def check_user_exists(client: httpx.AsyncClient, username: str) -> bool:
         return False
 
 
-# 레포 목록 수집 
+# ── 레포 목록 수집 ─────────────────────────────────────────────────────────
 async def fetch_repos(client: httpx.AsyncClient, username: str) -> list[dict]:
     """fork 제외, 최근 업데이트 순, 최대 20개"""
     try:
@@ -50,7 +89,7 @@ async def fetch_repos(client: httpx.AsyncClient, username: str) -> list[dict]:
         return []
 
 
-# 레포별 언어 수집 
+# ── 레포별 언어 수집 ───────────────────────────────────────────────────────
 async def fetch_languages(client: httpx.AsyncClient, username: str, repo_name: str) -> dict:
     """빈 레포면 {} 반환"""
     try:
@@ -66,7 +105,7 @@ async def fetch_languages(client: httpx.AsyncClient, username: str, repo_name: s
         return {}
 
 
-# 레포별 topics 수집 
+# ── 레포별 topics 수집 ────────────────────────────────────────────────────
 async def fetch_topics(client: httpx.AsyncClient, username: str, repo_name: str) -> list[str]:
     try:
         res = await client.get(
@@ -84,12 +123,45 @@ async def fetch_topics(client: httpx.AsyncClient, username: str, repo_name: str)
         return []
 
 
-# 언어 비중 계산
+# ── 레포별 package.json 수집 ──────────────────────────────────────────────
+async def fetch_package_json(client: httpx.AsyncClient, username: str, repo_name: str) -> set[str]:
+    """
+    package.json의 dependencies + devDependencies에서
+    주요 프레임워크/라이브러리 추출
+    반환: {"React", "Next.js", ...}
+    """
+    try:
+        res = await client.get(
+            f"{BASE_URL}/repos/{username}/{repo_name}/contents/package.json",
+            headers=HEADERS,
+            timeout=10,
+        )
+        if res.status_code != 200:
+            return set()
+
+        data = res.json()
+        content = base64.b64decode(data.get("content", "")).decode("utf-8")
+        pkg = json.loads(content)
+
+        all_deps = {}
+        all_deps.update(pkg.get("dependencies", {}))
+        all_deps.update(pkg.get("devDependencies", {}))
+
+        found = set()
+        for dep_name in all_deps.keys():
+            dep_lower = dep_name.lower()
+            for keyword, skill in PACKAGE_KEYWORDS.items():
+                if keyword in dep_lower and skill is not None:
+                    found.add(skill)
+
+        return found
+
+    except Exception:
+        return set()
+
+
+# ── 언어 비중 계산 ─────────────────────────────────────────────────────────
 def calc_language_ratio(all_languages: dict[str, int]) -> dict[str, float]:
-    """
-    {"JavaScript": 14000, "TypeScript": 8000}
-    → {"JavaScript": 63.6, "TypeScript": 36.4}
-    """
     total = sum(all_languages.values())
     if total == 0:
         return {}
@@ -99,24 +171,19 @@ def calc_language_ratio(all_languages: dict[str, int]) -> dict[str, float]:
     }
 
 
-# 메인 진입점
+# ── 메인 진입점 ───────────────────────────────────────────────────────────
 async def test_github(username: str) -> dict:
     """
-    username을 받아 언어 비중 + topics 반환
+    username을 받아 언어 비중 + topics + package_skills 반환
 
     성공 반환:
     {
         "username": "octocat",
         "languages": {"JavaScript": 63.6, "TypeScript": 36.4},
         "topics": ["react", "nextjs"],
+        "package_skills": ["React", "Next.js"],
         "top_repos": ["repo1", "repo2"],
         "error": None
-    }
-
-    실패 반환:
-    {
-        "username": None or str,
-        "error": "에러 메시지"
     }
     """
     username = username.strip()
@@ -141,7 +208,7 @@ async def test_github(username: str) -> dict:
                 "error": "분석할 공개 레포지토리가 없습니다.",
             }
 
-        # 3. 언어 + topics 병렬 수집
+        # 3. 언어 + topics + package.json 병렬 수집
         language_tasks = [
             fetch_languages(client, username, repo["name"])
             for repo in repos
@@ -150,9 +217,14 @@ async def test_github(username: str) -> dict:
             fetch_topics(client, username, repo["name"])
             for repo in repos
         ]
+        package_tasks = [
+            fetch_package_json(client, username, repo["name"])
+            for repo in repos
+        ]
 
         language_results = await asyncio.gather(*language_tasks)
         topic_results = await asyncio.gather(*topic_tasks)
+        package_results = await asyncio.gather(*package_tasks)
 
         # 4. 언어 bytes 합산
         merged_languages: dict[str, int] = {}
@@ -170,10 +242,16 @@ async def test_github(username: str) -> dict:
                 if topic not in all_topics:
                     all_topics.append(topic)
 
+        # 7. package.json skills 합산 (중복 제거)
+        all_package_skills: set[str] = set()
+        for pkg_skills in package_results:
+            all_package_skills.update(pkg_skills)
+
         return {
             "username": username,
             "languages": language_ratio,
             "topics": all_topics,
+            "package_skills": sorted(all_package_skills),
             "top_repos": [repo["name"] for repo in repos],
             "error": None,
         }
