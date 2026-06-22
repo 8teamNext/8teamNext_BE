@@ -3,7 +3,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "parser"))  # "job_pa
 
 from services.parsers.parser_router import parse_job
 # 공고 url
-URL = "https://www.jobkorea.co.kr/Recruit/GI_Read/49354072?Oem_Code=C1&rPageCode=TL&sc=416"
+URL = "https://m.jobkorea.co.kr/info/app_down.asp?Gno=49416174"
 
 async def main():
     print(f"파싱 중... {URL}\n")

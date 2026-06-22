@@ -8,6 +8,7 @@ import urllib.request
 from typing import List, Set, Optional
 from models import ResumeGithubResponse
 from services.text_utils import parse_skills_from_text
+from services.llm_analyzer import generate_resume_github_advice, generate_overall_evaluation
 
 
 # ── 이력서 검증 ──────────────────────────────────────────────────────────────
@@ -19,11 +20,76 @@ RESUME_STRUCTURE_KEYWORDS = [
     "프로젝트 경험", "주요 경험", "기술 스택", "보유 기술",
 ]
 
-# 기술 키워드
+# 기술 키워드 — 대한민국 30대 IT기업 채용공고 기준
 TECH_KEYWORDS = [
-    "java", "python", "spring", "react", "node", "docker", "aws", "git",
-    "sql", "javascript", "typescript", "kotlin", "mysql", "redis",
-    "linux", "github", "ci/cd", "jpa", "restful", "kubernetes",
+    # ── 언어 ──────────────────────────────────────────────
+    "java", "kotlin", "python", "javascript", "typescript", "go", "golang",
+    "scala", "swift", "dart", "c++", "c#", "php", "ruby", "rust",
+
+    # ── 백엔드 프레임워크 ──────────────────────────────────
+    "spring", "spring boot", "spring framework", "spring batch", "spring security",
+    "spring webflux", "ktor", "quarkus", "micronaut",
+    "django", "fastapi", "flask",
+    "node", "node.js", "express", "nestjs", "koa",
+    "rails", "laravel",
+
+    # ── 프론트엔드 / 앱 ────────────────────────────────────
+    "react", "vue", "vue.js", "angular", "next.js", "nuxt", "nuxt.js",
+    "svelte", "flutter", "react native",
+    "html", "css", "sass", "webpack", "vite",
+
+    # ── 데이터베이스 ──────────────────────────────────────
+    "mysql", "postgresql", "postgres", "oracle", "mariadb", "mssql",
+    "mongodb", "dynamodb", "cassandra", "hbase", "couchbase",
+    "redis", "memcached",
+    "elasticsearch", "opensearch", "solr",
+    "clickhouse", "hive", "presto", "trino",
+    "bigquery", "snowflake",
+
+    # ── ORM / 데이터 접근 ─────────────────────────────────
+    "jpa", "hibernate", "mybatis", "querydsl", "sqlalchemy", "prisma",
+
+    # ── 클라우드 ──────────────────────────────────────────
+    "aws", "gcp", "azure", "ncp", "naver cloud",
+    "ec2", "s3", "lambda", "rds", "eks", "ecs",
+
+    # ── 인프라 / DevOps ────────────────────────────────────
+    "docker", "kubernetes", "k8s", "helm", "istio", "argocd",
+    "terraform", "ansible", "puppet", "chef",
+    "jenkins", "github actions", "gitlab ci", "circleci", "teamcity",
+    "nginx", "apache", "tomcat", "netty",
+    "linux", "bash", "shell",
+
+    # ── 메시지 큐 / 스트리밍 ──────────────────────────────
+    "kafka", "rabbitmq", "activemq", "sqs", "sns", "pubsub",
+    "flink", "spark", "storm", "airflow",
+
+    # ── API / 통신 ────────────────────────────────────────
+    "restful", "rest api", "graphql", "grpc", "websocket",
+    "openapi", "swagger",
+
+    # ── 모니터링 / 관측 ───────────────────────────────────
+    "prometheus", "grafana", "elk", "kibana", "logstash",
+    "datadog", "sentry", "jaeger", "zipkin", "newrelic",
+
+    # ── 테스트 ────────────────────────────────────────────
+    "junit", "mockito", "jest", "cypress", "selenium", "playwright",
+    "testcontainers",
+
+    # ── 버전관리 / 협업 ───────────────────────────────────
+    "git", "github", "gitlab", "bitbucket", "jira", "confluence",
+
+    # ── 보안 / 인증 ───────────────────────────────────────
+    "oauth", "jwt", "spring security", "keycloak", "iam",
+
+    # ── AI / ML ───────────────────────────────────────────
+    "pytorch", "tensorflow", "keras", "scikit-learn", "pandas", "numpy",
+    "langchain", "openai", "huggingface", "mlflow", "kubeflow",
+    "llm", "rag",
+
+    # ── 기타 ──────────────────────────────────────────────
+    "ci/cd", "msa", "microservice", "ddd", "tdd", "agile", "scrum",
+    "rxjava", "coroutine", "webflux",
 ]
 
 # 공부 노트/메모로 판단하는 패턴 — 이력서에는 절대 없는 것들
@@ -234,29 +300,24 @@ async def analyze_resume_github(
     total_resume = len(resume_skills)
     verified_count = len(verified_skills)
     ratio = verified_count / total_resume if total_resume else 0.5
-    match_pct = int(ratio * 100)
+    match_pct = round(ratio * 100)
 
-    if ratio >= 0.8:
-        overall_evaluation = (
-            f"이력서와 포트폴리오의 기술 정합성이 매우 높습니다! "
-            f"이력서에 기재된 {total_resume}개 기술 중 {verified_count}개 기술이 "
-            f"GitHub({github_username}) 저장소의 실제 소스코드에서 완벽히 검증되었습니다. "
-            f"신뢰도가 아주 높은 포트폴리오입니다."
-        )
-    elif ratio >= 0.5:
-        examples = ", ".join(unverified_skills[:2])
-        overall_evaluation = (
-            f"기본적인 기술 일치는 양호하나 (일치율 {match_pct}%), "
-            f"이력서에 기재된 기술 중 {len(unverified_skills)}개 기술(예: {examples})은 "
-            f"GitHub 상의 코드 구현 증빙이 다소 부족합니다. "
-            f"해당 기술들을 보완할 수 있는 프로젝트를 추가하는 것을 추천합니다."
-        )
-    else:
-        overall_evaluation = (
-            f"이력서와 깃허브 코드 간의 검증 Gap이 발견되었습니다 (일치율 {match_pct}%). "
-            f"이력서에 작성된 주요 기술 스택의 실제 구현 코드가 공개 GitHub 저장소에서 확인되지 않습니다. "
-            f"작업했던 로컬 프로젝트를 깃허브에 업로드하거나 이력서의 기술 설명을 더 다듬을 필요가 있습니다."
-        )
+    # 4. LLM 병렬 생성
+    overall_evaluation, advice = await asyncio.gather(
+        generate_overall_evaluation(
+            verified_skills=verified_skills,
+            unverified_skills=unverified_skills,
+            newly_discovered_skills=newly_discovered_skills,
+            match_pct=match_pct,
+            github_username=github_username,
+        ),
+        generate_resume_github_advice(
+            verified_skills=verified_skills,
+            unverified_skills=unverified_skills,
+            newly_discovered_skills=newly_discovered_skills,
+            match_pct=match_pct,
+        ),
+    )
 
     return ResumeGithubResponse(
         overall_evaluation=overall_evaluation,
@@ -265,4 +326,6 @@ async def analyze_resume_github(
         verified_skills=verified_skills,
         unverified_skills=unverified_skills,
         newly_discovered_skills=newly_discovered_skills,
+        supplement_advice=advice["supplement_advice"],
+        update_suggestion=advice["update_suggestion"],
     )
