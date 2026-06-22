@@ -29,6 +29,7 @@ from services.resume_matcher import match_resume_github
 from services.resume_analysis import analyze_resume_github, extract_pdf_text, validate_resume_text
 from services.interview_gen import generate_interview_questions
 from services.cover_letter_cmp import compare_cover_letters
+from services.leancageAnalysisTest import leancage_test_bp
 
 app = Flask(__name__)
 
@@ -52,7 +53,6 @@ def read_root():
 CORS(app, resources={r"/*": {"origins": "*"}})
 app.register_blueprint(crawler_bp)
 
-from services.leancageAnalysisTest import leancage_test_bp
 app.register_blueprint(leancage_test_bp)
 
 @app.route("/api/analyze/github", methods=["POST"])

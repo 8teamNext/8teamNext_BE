@@ -5,10 +5,10 @@
 공통 포맷(service / overall_score / metrics / raw / detail)으로 반환합니다.
 
 점수 배분 (공고별 100점):
-  기술 매칭률    60% — TECH_ALIASES 키워드 기준, 가장 객관적
-  담당업무 연관도 30% — 공고 tasks 도메인 키워드 ↔ 이력서 텍스트 매칭
-  경력 조건 부합  10% — job_type ↔ 이력서 경력 감지, 규칙 기반
-                        (가중치 낮은 이유: "무관" 공고가 많아 변별력 약함 + 휴리스틱 감지)
+  기술 매칭률      60% — TECH_ALIASES 키워드 기준, 가장 객관적
+  직무 도메인 일치도 30% — 공고 제목에서 직무 도메인 감지 후 대표 기술셋과 이력서 비교
+  경력 조건 부합    10% — job_type ↔ 이력서 경력 감지, 규칙 기반
+                          (가중치 낮은 이유: "무관" 공고가 많아 변별력 약함 + 휴리스틱 감지)
 """
 
 import os
@@ -24,7 +24,7 @@ from services.parsers.base import extract_techs_from_text, TECH_ALIASES
 # ─── 점수 가중치 ─────────────────────────────────────────────────────────────
 
 _WEIGHT_TECH   = 0.60
-_WEIGHT_TASK   = 0.30
+_WEIGHT_DOMAIN = 0.30
 _WEIGHT_CAREER = 0.10
 
 
@@ -53,7 +53,7 @@ class JobComparison(TypedDict):
     job_type: str
     overall_score: int
     tech_score: int
-    task_score: int
+    domain_score: int
     career_score: int
     matched_skills: List[str]
     missing_skills: List[str]
@@ -121,41 +121,62 @@ def _score_career_fit(career_level: str, job_type: str) -> int:
     return _CAREER_FIT_TABLE.get((career_level, job_type), 65)
 
 
-# ─── 담당업무 연관도 ─────────────────────────────────────────────────────────
+# ─── 직무 도메인 일치도 ──────────────────────────────────────────────────────
 
-# 기술 스택 이외의 업무 도메인 키워드 (TECH_ALIASES와 겹치지 않는 것들 위주)
-_DOMAIN_KEYWORDS = [
-    # 개발 방법론
-    "REST", "API", "MSA", "마이크로서비스", "CI/CD", "TDD", "애자일", "스크럼",
-    # 인프라/운영
-    "인프라", "배포", "운영", "모니터링", "자동화", "로그",
-    # 데이터/성능
-    "데이터", "분석", "쿼리", "최적화", "성능", "대용량", "트래픽", "고가용성",
-    # 보안/인증
-    "인증", "인가", "보안",
-    # 협업/품질
-    "코드 리뷰", "문서화",
-    # 아키텍처
-    "설계", "구축",
+# 도메인별 대표 기술 셋 (TECH_ALIASES 정규화 이름 기준, 절반 매칭 시 만점)
+_DOMAIN_TECH: Dict[str, List[str]] = {
+    "backend":  ["Java", "Spring Boot", "Python", "Node.js", "Go", "MySQL", "PostgreSQL", "Redis", "Docker", "AWS"],
+    "frontend": ["React", "Vue", "Next.js", "Nuxt.js", "TypeScript", "JavaScript", "Tailwind CSS", "GraphQL", "REST API", "Webpack"],
+    "fullstack": ["React", "Node.js", "TypeScript", "Python", "MySQL", "PostgreSQL", "Redis", "Docker", "AWS", "Git"],
+    "data":     ["Python", "MySQL", "PostgreSQL", "MongoDB", "Redis", "Elasticsearch", "Kafka", "AWS", "Go", "Spark"],
+    "devops":   ["Docker", "Kubernetes", "AWS", "GCP", "Azure", "Jenkins", "Terraform", "Git", "Kafka", "Elasticsearch"],
+    "mobile":   ["Flutter", "React Native", "Kotlin", "Swift", "TypeScript", "JavaScript", "Android", "iOS"],
+    "android":  ["Kotlin", "Java", "Android", "C++", "REST API", "MySQL"],
+    "ios":      ["Swift", "iOS", "C++", "REST API", "MySQL", "MongoDB"],
+}
+
+# 공고 제목 키워드 → 도메인 매핑
+_DOMAIN_TITLE_MAP: List[tuple] = [
+    (["백엔드", "서버", "backend", "back-end"], "backend"),
+    (["프론트엔드", "프런트엔드", "frontend", "front-end"], "frontend"),
+    (["풀스택", "풀 스택", "fullstack", "full-stack", "full stack"], "fullstack"),
+    (["데이터", "data", "머신러닝", "machine learning", "딥러닝", "ai", "인공지능"], "data"),
+    (["devops", "데브옵스", "인프라", "sre", "클라우드"], "devops"),
+    (["안드로이드", "android"], "android"),
+    (["ios", "아이폰"], "ios"),
+    (["모바일", "mobile", "앱 개발"], "mobile"),
 ]
 
 
-def _score_task_relevance(resume_text: str, tasks: List[str]) -> int:
-    """공고 담당업무 키워드 중 이력서에도 등장하는 비율로 0~100 반환.
-    tasks가 비어 있으면 파싱 실패로 간주해 중립 50 반환."""
-    if not tasks:
-        return 50
+def _detect_domain(title: str) -> str:
+    title_lower = title.lower()
+    for keywords, domain in _DOMAIN_TITLE_MAP:
+        if any(kw in title_lower for kw in keywords):
+            return domain
+    return ""
 
-    tasks_lower = " ".join(tasks).lower()
-    resume_lower = resume_text.lower()
 
-    # tasks 텍스트에 등장하는 도메인 키워드만 추림
-    task_keywords = [kw for kw in _DOMAIN_KEYWORDS if kw.lower() in tasks_lower]
-    if not task_keywords:
-        return 50
+def _score_domain_match(resume_skills: List[str], title: str) -> int:
+    """공고 제목에서 직무 도메인을 감지하고 해당 도메인 대표 기술과 이력서 기술의 일치율을 반환.
+    도메인 미감지 시 전체 도메인 중 최고 점수를 반환."""
+    resume_set = set(resume_skills)
+    domain = _detect_domain(title)
 
-    matched = sum(1 for kw in task_keywords if kw.lower() in resume_lower)
-    return int(matched / len(task_keywords) * 100)
+    if domain:
+        domain_skills = set(_DOMAIN_TECH[domain])
+        matched = resume_set & domain_skills
+        threshold = max(len(domain_skills) * 0.5, 1)
+        return min(int(len(matched) / threshold * 100), 100)
+
+    # 도메인 미감지: 전체 도메인 중 가장 높은 점수 반환
+    best = 0
+    for skills in _DOMAIN_TECH.values():
+        d_set = set(skills)
+        threshold = max(len(d_set) * 0.5, 1)
+        score = min(int(len(resume_set & d_set) / threshold * 100), 100)
+        if score > best:
+            best = score
+    return best if best > 0 else 50
 
 
 # ─── 내부 헬퍼 ────────────────────────────────────────────────────────────────
@@ -173,8 +194,8 @@ def _get_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
 
-def _weighted_score(tech: int, task: int, career: int) -> int:
-    return int(tech * _WEIGHT_TECH + task * _WEIGHT_TASK + career * _WEIGHT_CAREER)
+def _weighted_score(tech: int, domain: int, career: int) -> int:
+    return int(tech * _WEIGHT_TECH + domain * _WEIGHT_DOMAIN + career * _WEIGHT_CAREER)
 
 
 def _build_metrics(
@@ -184,15 +205,15 @@ def _build_metrics(
 ) -> List[MetricItem]:
     if not job_comparisons:
         return [
-            MetricItem(key="tech_match",     label="기술 매칭률",     score=0, detail="분석된 공고 없음"),
-            MetricItem(key="task_relevance", label="담당업무 연관도", score=0, detail="분석된 공고 없음"),
-            MetricItem(key="career_fit",     label="경력 조건 부합", score=0, detail="분석된 공고 없음"),
+            MetricItem(key="tech_match",    label="기술 매칭률",       score=0, detail="분석된 공고 없음"),
+            MetricItem(key="domain_match",  label="직무 도메인 일치도", score=0, detail="분석된 공고 없음"),
+            MetricItem(key="career_fit",    label="경력 조건 부합",    score=0, detail="분석된 공고 없음"),
         ]
 
     n = len(job_comparisons)
-    avg_tech   = int(sum(j["tech_score"]   for j in job_comparisons) / n)
-    avg_task   = int(sum(j["task_score"]   for j in job_comparisons) / n)
-    avg_career = int(sum(j["career_score"] for j in job_comparisons) / n)
+    avg_tech   = int(sum(j["tech_score"]    for j in job_comparisons) / n)
+    avg_domain = int(sum(j["domain_score"]  for j in job_comparisons) / n)
+    avg_career = int(sum(j["career_score"]  for j in job_comparisons) / n)
 
     career_label = {"경력": "경력자", "신입": "신입", "unknown": "경력 미확인"}.get(career_level, career_level)
 
@@ -202,11 +223,11 @@ def _build_metrics(
         "score": avg_tech,
         "detail": f"{n}개 공고 평균 · 매칭 기술 {len(all_matched)}개",
     }
-    task_metric: MetricItem = {
-        "key": "task_relevance",
-        "label": "담당업무 연관도",
-        "score": avg_task,
-        "detail": f"{n}개 공고 평균 · 업무 도메인 키워드 기준",
+    domain_metric: MetricItem = {
+        "key": "domain_match",
+        "label": "직무 도메인 일치도",
+        "score": avg_domain,
+        "detail": f"{n}개 공고 평균 · 공고 제목 기반 직무 도메인 감지",
     }
     career_metric: MetricItem = {
         "key": "career_fit",
@@ -215,7 +236,7 @@ def _build_metrics(
         "detail": f"이력서 감지: {career_label} · {n}개 공고 평균",
     }
 
-    return [tech_metric, task_metric, career_metric]
+    return [tech_metric, domain_metric, career_metric]
 
 
 # ─── LLM 종합 평가 ────────────────────────────────────────────────────────────
@@ -223,7 +244,7 @@ def _build_metrics(
 async def _generate_evaluation(
     overall_score: int,
     avg_tech: int,
-    avg_task: int,
+    avg_domain: int,
     avg_career: int,
     matched_skills: List[str],
     missing_skills: List[str],
@@ -234,7 +255,7 @@ async def _generate_evaluation(
     context = {
         "overall_score": overall_score,
         "avg_tech_match": avg_tech,
-        "avg_task_relevance": avg_task,
+        "avg_domain_match": avg_domain,
         "avg_career_fit": avg_career,
         "career_level": career_level,
         "total_jobs_analyzed": job_count,
@@ -253,6 +274,7 @@ async def _generate_evaluation(
 - JSON 없이 평가 텍스트만 반환"""
 
     try:
+        print("LLM이 돌아가고 있습니다.")
         client = _get_openai_client()
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
@@ -260,8 +282,10 @@ async def _generate_evaluation(
             max_tokens=500,
             temperature=0.3,
         )
+        print("LLM 돌아간 결과값은 : ",(response.choices[0].message.content or "").strip())
         return (response.choices[0].message.content or "").strip()
     except Exception:
+        print("예외발생!")
         missing_preview = ", ".join(missing_skills[:3])
         if overall_score >= 80:
             return (
@@ -322,9 +346,9 @@ async def leancage_analysis(
         extra   = sorted(resume_set - job_skills)
 
         tech_score   = int(len(matched) / max(len(job_skills), 1) * 100)
-        task_score   = _score_task_relevance(resume_text, job.get("tasks") or [])
+        domain_score = _score_domain_match(resume_skills, job.get("title", ""))
         career_score = _score_career_fit(career_level, job.get("job_type", ""))
-        overall      = _weighted_score(tech_score, task_score, career_score)
+        overall      = _weighted_score(tech_score, domain_score, career_score)
 
         job_comparisons.append(JobComparison(
             url=job.get("url", ""),
@@ -333,7 +357,7 @@ async def leancage_analysis(
             job_type=job.get("job_type", ""),
             overall_score=overall,
             tech_score=tech_score,
-            task_score=task_score,
+            domain_score=domain_score,
             career_score=career_score,
             matched_skills=matched,
             missing_skills=missing,
@@ -349,11 +373,11 @@ async def leancage_analysis(
     n = len(job_comparisons)
     overall_score = int(sum(j["overall_score"] for j in job_comparisons) / n) if n else 0
     avg_tech      = int(sum(j["tech_score"]    for j in job_comparisons) / n) if n else 0
-    avg_task      = int(sum(j["task_score"]    for j in job_comparisons) / n) if n else 0
+    avg_domain    = int(sum(j["domain_score"]  for j in job_comparisons) / n) if n else 0
     avg_career    = int(sum(j["career_score"]  for j in job_comparisons) / n) if n else 0
 
     overall_evaluation = await _generate_evaluation(
-        overall_score, avg_tech, avg_task, avg_career,
+        overall_score, avg_tech, avg_domain, avg_career,
         all_matched, all_missing, career_level, n,
     )
 
