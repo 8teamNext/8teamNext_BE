@@ -5,8 +5,24 @@ from typing import Optional
 
 # ── 기술스택 정규화 테이블 ─────────────────────────────────────────────────
 TECH_ALIASES: dict[str, str] = {
-#     "ai":"ai","ai":"pytorch","ai": "tensorflow", "ai":"keras", "ai":"scikit-learn", "ai":"pandas", "ai":"numpy","ai":"langchain", "ai":"openai", "ai":"huggingface", "ai":"mlflow", "ai":"kubeflow",
-# "ai":"llm","ai":"rag",
+    # ai
+    "ai": "AI",
+    "pytorch": "PyTorch",
+    "tensorflow": "TensorFlow",
+    "keras": "Keras",
+    "scikit-learn": "scikit-learn",
+    "sklearn": "scikit-learn",
+    "pandas": "pandas",
+    "numpy": "numpy",
+    "langchain": "LangChain",
+    "openai": "OpenAI",
+    "huggingface": "Hugging Face",
+    "mlflow": "MLflow",
+    "kubeflow": "Kubeflow",
+    "llm": "LLM",
+    "rag": "RAG",
+    
+    # 프론트엔드 / 자바스크립트 
     "react.js": "React", "reactjs": "React", "react": "React",
     "vue.js": "Vue", "vuejs": "Vue", "vue": "Vue",
     "next.js": "Next.js", "nextjs": "Next.js",
@@ -14,8 +30,10 @@ TECH_ALIASES: dict[str, str] = {
     "node.js": "Node.js", "nodejs": "Node.js",
     "typescript": "TypeScript", "ts": "TypeScript",
     "javascript": "JavaScript", "js": "JavaScript",
+    
+    # 백엔드 / 메인 언어 및 프레임워크
     "python": "Python",
-    "java": "Java","Java":"자바","java":"java","java":"Java","자바":"Java","JAVA":"JAVA",
+    "java": "Java", "자바": "Java",  # lower() 처리되므로 소문자 키 위주로 구성
     "kotlin": "Kotlin",
     "swift": "Swift",
     "spring boot": "Spring Boot", "springboot": "Spring Boot",
@@ -23,17 +41,23 @@ TECH_ALIASES: dict[str, str] = {
     "django": "Django",
     "fastapi": "FastAPI",
     "flask": "Flask",
+    
+    # 데이터베이스
     "mysql": "MySQL",
     "mariadb": "MariaDB",
     "postgresql": "PostgreSQL", "postgres": "PostgreSQL",
     "mongodb": "MongoDB", "mongo": "MongoDB",
     "redis": "Redis",
+    
+    # 인프라 / DevOps
     "docker": "Docker",
     "kubernetes": "Kubernetes", "k8s": "Kubernetes",
     "aws": "AWS",
     "gcp": "GCP",
     "azure": "Azure",
     "git": "Git",
+    
+    # 기타 기술 및 언어
     "graphql": "GraphQL",
     "rest api": "REST API", "restapi": "REST API",
     "flutter": "Flutter",
@@ -51,12 +75,12 @@ TECH_ALIASES: dict[str, str] = {
     "kafka": "Kafka",
     "jenkins": "Jenkins",
     "terraform": "Terraform",
-    
 }
 
 JOB_TYPE_KEYWORDS = {
     "신입": ["신입"],
     "경력": ["경력"],
+    "신입/경력":["신입/경력"],
     "무관": ["무관", "신입/경력", "경력/신입"],
 }
 
@@ -69,6 +93,7 @@ def extract_techs_from_text(text: str) -> list[str]:
     """텍스트에서 기술스택 키워드를 추출해 정규화된 목록으로 반환."""
     found = set()
     lower = text.lower()
+    # 글자 수가 긴 키워드부터 매칭하여 겹침 방지 (ex: spring boot가 spring보다 먼저 매칭되도록)
     for alias in sorted(TECH_ALIASES.keys(), key=len, reverse=True):
         pattern = r"(?<![a-zA-Z0-9])" + re.escape(alias) + r"(?![a-zA-Z0-9])"
         if re.search(pattern, lower):
