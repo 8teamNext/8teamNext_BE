@@ -81,6 +81,8 @@ class ResumeGithubResponse(BaseModel):
     verified_skills: List[str]         # present in both or verified by repo
     unverified_skills: List[str]       # resume-only, no github proof
     newly_discovered_skills: List[str] # github-only, not on resume
+    supplement_advice: str = ""        # LLM 이력서 보완 권고
+    update_suggestion: str = ""        # LLM 이력서 업데이트 제안
 
 # 4. AI Interview Question Generator Models
 class InterviewGenRequest(BaseModel):
