@@ -9,7 +9,7 @@ from services.crawler import crawler_bp
 from services.github_analyzer import analyze_github
 from services.github_service import test_github
 from services.llm_service import infer_skills
-
+from services.matching_service import match_all
 
 from models import (
     GithubAnalysisRequest, GithubAnalysisResponse,
@@ -70,6 +70,142 @@ async def api_analyze_github():
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"GitHub analysis failed: {str(e)}"}), 500
+    
+# """
+#     POST /api/analyze
+#     body: {
+#         "github_username": "kimcoding",
+#         "job_urls": ["https://www.jobkorea.co.kr/..."]
+#     }
+ 
+#     반환:
+#     {
+#         "github": {
+#             "username": "kimcoding",
+#             "confirmed_skills": ["TypeScript", "JavaScript"],
+#             "inferred_skills": ["React", "Next.js"],
+#             "raw_languages": {"TypeScript": 60.5, ...}
+#         },
+#         "matching": [
+#             {
+#                 "url_index": 0,
+#                 "status": "success",
+#                 "title": "프론트엔드 개발자",
+#                 "company": "회사명",
+#                 "job_type": "신입",
+#                 "jd_total": 3,
+#                 "confirmed_score": 66.7,
+#                 "inferred_score": 33.3,
+#                 "confirmed_matched": ["TypeScript"],
+#                 "inferred_matched": ["React"],
+#                 "missing": ["Docker"],
+#                 "extra_confirmed": ["JavaScript"]
+#             }
+#         ]
+#     }
+#     """
+
+@app.route("/api/analyze", methods=["POST"])
+async def api_analyze():
+    data = request.get_json(silent=True)
+ 
+    # 검증
+    if not data:
+        return jsonify({"error": "요청 body가 없습니다."}), 400
+ 
+    github_username = data.get("github_username", "").strip()
+    job_urls = data.get("job_urls", [])
+ 
+    if not github_username:
+        return jsonify({"error": "github_username이 필요합니다."}), 400
+ 
+    if not isinstance(job_urls, list) or len(job_urls) == 0:
+        return jsonify({"error": "job_urls는 1개 이상이어야 합니다."}), 400
+ 
+    if len(job_urls) > 5:
+        return jsonify({"error": "job_urls는 최대 5개까지 가능합니다."}), 400
+ 
+    for url in job_urls:
+        if not isinstance(url, str) or not url.startswith("http"):
+            return jsonify({"error": f"올바르지 않은 URL: {url}"}), 400
+ 
+    # GitHub 분석 + 크롤링 병렬 실행
+    import asyncio
+    from services.github_service import test_github
+    from services.llm_service import infer_skills
+    from services.parsers.parser_router import parse_job
+ 
+    async def crawl_all(urls: list[str]) -> list[dict]:
+        tasks = [parse_job(url) for url in urls]
+        results = await asyncio.gather(*tasks)
+        crawl_results = []
+        for i, result in enumerate(results):
+            d = result.to_dict()
+            if d.get("error"):
+                crawl_results.append({
+                    "url_index": i,
+                    "status": "failed",
+                    "error": d["error"],
+                })
+            else:
+                crawl_results.append({
+                    "url_index": i,
+                    "status": "success",
+                    "title": d.get("title", ""),
+                    "company": d.get("company", ""),
+                    "job_type": d.get("job_type", ""),
+                    "tech_stack": d.get("tech_stack", []),
+                })
+        return crawl_results
+ 
+    async def github_analyze(username: str) -> dict:
+        github_result = await test_github(username)
+        if github_result.get("error"):
+            return {"error": github_result["error"]}
+        skill_result = await infer_skills(
+            username=username,
+            languages=github_result["languages"],
+            topics=github_result["topics"],
+        )
+        return {
+            "username": username,
+            "confirmed_skills": skill_result["confirmed"],
+            "inferred_skills": skill_result["inferred"],
+            "raw_languages": github_result["languages"],
+            "error": None,
+        }
+ 
+    # 병렬 실행
+    crawl_result, github_result = await asyncio.gather(
+        crawl_all(job_urls),
+        github_analyze(github_username),
+    )
+ 
+    # GitHub 분석 실패
+    if github_result.get("error"):
+        status = 404 if "찾을 수 없습니다" in github_result["error"] else 400
+        return jsonify({"error": github_result["error"]}), status
+ 
+    # 매칭 계산
+    matching = match_all(
+        confirmed_skills=github_result["confirmed_skills"],
+        inferred_skills=github_result["inferred_skills"],
+        crawl_results=crawl_result,
+    )
+ 
+    return jsonify({
+        "github": {
+            "username": github_result["username"],
+            "confirmed_skills": github_result["confirmed_skills"],
+            "inferred_skills": github_result["inferred_skills"],
+            "raw_languages": github_result["raw_languages"],
+        },
+        "matching": matching,
+    })
+
+
+
+
 
 @app.route("/api/analyze/gap", methods=["POST"])
 async def api_analyze_gap():
