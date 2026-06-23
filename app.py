@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import re
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
@@ -7,6 +8,7 @@ from typing import List, Dict, Any
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 from services.crawler import crawler_bp 
+from services.parsers.jobkorea_parser_v2 import parse_jobkorea
 from services.github_analyzer import analyze_github
 from services.github_service import test_github
 from services.llm_service import infer_skills
@@ -22,12 +24,24 @@ from models import (
     UnifiedAnalysisRequest, UnifiedAnalysisResponse
 )
 
+def _crawl_jobkorea(url: str):
+    """동기 컨텍스트에서 Playwright 비동기 크롤러 실행."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(parse_jobkorea(url))
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
+_JOBKOREA_URL_RE = re.compile(r'^https?://(?:www\.)?jobkorea\.co\.kr/', re.IGNORECASE)
+
 # Import services
 from services.github_analyzer import analyze_github
 from services.gap_analyzer import analyze_gap
 from services.resume_matcher import match_resume_github
 from services.resume_analysis import analyze_resume_github, extract_pdf_text, validate_resume_text
-from services.interview_gen import generate_interview_questions
+from services.interview_gen_openai import generate_interview_questions
 from services.cover_letter_cmp import compare_cover_letters
 from services.leancageAnalysisTest import leancage_test_bp
 
@@ -55,12 +69,30 @@ app.register_blueprint(crawler_bp)
 
 app.register_blueprint(leancage_test_bp)
 
+@app.route("/api/debug/crawl", methods=["GET"])
+def api_debug_crawl():
+    url = request.args.get("url", "")
+    if not url:
+        return jsonify({"detail": "url 쿼리 파라미터가 필요합니다."}), 400
+    info = _crawl_jobkorea(url)
+    return jsonify({
+        "error": info.error,
+        "title": info.title,
+        "company": info.company,
+        "job_type": info.job_type,
+        "tasks": info.tasks,
+        "skills": info.skills,
+        "tech_stack": info.tech_stack,
+        "raw_text_length": len(info.raw_text),
+        "raw_text_preview": info.raw_text[:5000],
+    })
+
 @app.route("/api/analyze/github", methods=["POST"])
-async def api_analyze_github():
+def api_analyze_github():
     try:
         data = request.get_json()
         payload = GithubAnalysisRequest.model_validate(data)
-        response = await analyze_github(payload.repo_urls, payload.job_urls)
+        response = analyze_github(payload.repo_urls, payload.job_urls)
         
         # Save to history
         new_hist = AnalysisHistoryItem(
@@ -159,6 +191,7 @@ async def api_analyze():
                     "company": d.get("company", ""),
                     "job_type": d.get("job_type", ""),
                     "tech_stack": d.get("tech_stack", []),
+                    "positions": d.get("positions", []),
                 })
         return crawl_results
  
@@ -209,8 +242,6 @@ async def api_analyze():
         },
         "matching": matching,
     })
-
-
 
 
 
@@ -291,14 +322,33 @@ async def api_parse_resume():
 
 
 @app.route("/api/analyze/interview-questions", methods=["POST"])
-async def api_analyze_interview_questions():
+def api_analyze_interview_questions():
     try:
         data = request.get_json()
         payload = InterviewGenRequest.model_validate(data)
         cover_letter = payload.cover_letter if payload.cover_letter else db_profile.default_cover_letter
-        response = await generate_interview_questions(cover_letter)
-        
-        # Save to history
+        job_posting = payload.job_posting or ""
+
+        job_text = job_posting.strip()
+        crawled_skills: list = []
+        if job_text and _JOBKOREA_URL_RE.match(job_text):
+            # 잡코리아 URL: 크롤링 후 raw_text를 LLM에 전달
+            info = _crawl_jobkorea(job_text)
+            if info.error:
+                return jsonify({"detail": f"잡코리아 채용공고를 불러오지 못했습니다: {info.error}"}), 400
+            crawled_skills = info.skills
+            header = "\n".join(filter(None, [
+                f"직무: {info.title}" if info.title else "",
+                f"회사: {info.company}" if info.company else "",
+                f"스킬: {', '.join(info.skills)}" if info.skills else "",
+                f"요구 기술스택: {', '.join(info.tech_stack)}" if info.tech_stack else "",
+            ]))
+            job_posting = (header + "\n\n" + info.raw_text[:3000]).strip()
+
+        response = generate_interview_questions(cover_letter, job_posting)
+        if crawled_skills and response.job_posting_analysis:
+            response.job_posting_analysis.skills = crawled_skills
+
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",
             type="interview",
@@ -306,8 +356,10 @@ async def api_analyze_interview_questions():
             summary=f"면접 질문 생성: {len(response.questions)}개 질문 추출"
         )
         db_history.insert(0, new_hist)
-        
+
         return jsonify(response.model_dump())
+    except ValueError as e:
+        return jsonify({"detail": str(e)}), 400
     except Exception as e:
         return jsonify({"detail": f"Interview question generation failed: {str(e)}"}), 500
 
