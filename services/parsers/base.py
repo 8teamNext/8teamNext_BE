@@ -107,7 +107,6 @@ def extract_techs_from_text(text: str) -> list[str]:
         pattern = r"(?<![a-zA-Z0-9])" + re.escape(alias) + r"(?![a-zA-Z0-9])"
         if re.search(pattern, lower):
             found.add(TECH_ALIASES[alias])
-
     return sorted(found)
 
 
@@ -118,6 +117,19 @@ def detect_job_type(text: str) -> str:
                 return job_type
     return ""
 
+
+# ── 공통 데이터 클래스 ─────────────────────────────────────────────────────
+@dataclass
+class JobInfo:
+    url: str
+    title: str = ""
+    company: str = ""
+    job_type: str = ""
+    tasks: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
+    tech_stack: list[str] = field(default_factory=list)
+    raw_text: str = ""
+    error: Optional[str] = None
 
 # ────────────────────────────────────────────────────────────────
 # Position
@@ -160,6 +172,8 @@ class JobInfo:
     job_type: str = ""
 
     positions: list[PositionInfo] = field(default_factory=list)
+    tasks: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
 
     # 전체 공고 기준 기술스택 (매칭용)
     tech_stack: list[str] = field(default_factory=list)
@@ -174,6 +188,7 @@ class JobInfo:
             "title": self.title,
             "company": self.company,
             "job_type": self.job_type,
+            "tasks": self.tasks,
             "positions": [p.to_dict() for p in self.positions],
             "tech_stack": self.tech_stack,
             "error": self.error,
