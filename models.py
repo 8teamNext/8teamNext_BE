@@ -1,6 +1,13 @@
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 
+# 공통 포맷
+class MetricItem(BaseModel):
+    key: str
+    label: str
+    score: int
+    detail: str
+
 # 1. GitHub Analysis Models
 class GithubAnalysisRequest(BaseModel):
     repo_urls: List[str] = Field(..., max_items=5)
@@ -74,15 +81,29 @@ class ResumeGithubRequest(BaseModel):
     github_username: str
     tech_stack: List[str]
 
+class ResumeGithubRaw(BaseModel):
+    match_pct: int                       # 기술 일치율
+    verified_skills: List[str]           # 이력서+GitHub 모두 확인된 기술
+    unverified_skills: List[str]         # 이력서에만 있고 GitHub 미증빙 기술
+    newly_discovered_skills: List[str]   # GitHub에서만 발견된 기술
+    overall_evaluation: str              # LLM 종합 평가
+
+class ResumeGithubResult(BaseModel):
+    service: str = "resume-github"
+    overall_score: int                   # match_pct 기준
+    metrics: List[MetricItem]            # 3개 지표
+    raw: ResumeGithubRaw
+
 class ResumeGithubResponse(BaseModel):
     overall_evaluation: str
     resume_skills: List[str]
     github_skills: List[str]
-    verified_skills: List[str]         # present in both or verified by repo
-    unverified_skills: List[str]       # resume-only, no github proof
-    newly_discovered_skills: List[str] # github-only, not on resume
-    supplement_advice: str = ""        # LLM 이력서 보완 권고
-    update_suggestion: str = ""        # LLM 이력서 업데이트 제안
+    verified_skills: List[str]
+    unverified_skills: List[str]
+    newly_discovered_skills: List[str]
+    supplement_advice: str = ""
+    update_suggestion: str = ""
+    comparison_result: Optional[ResumeGithubResult] = None  # 종합 분석 전달용
 
 # 4. AI Interview Question Generator Models
 class InterviewGenRequest(BaseModel):
@@ -124,12 +145,6 @@ class AnalysisHistoryItem(BaseModel):
     summary: str
 
 # 7. 종합 페이지 공통 포맷
-class MetricItem(BaseModel):
-    key: str
-    label: str
-    score: int
-    detail: str
-
 class ComparisonRaw(BaseModel):
     active_weeks: int
     total_commits: int

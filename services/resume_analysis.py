@@ -6,7 +6,7 @@ import json
 import re
 import urllib.request
 from typing import List, Set, Optional
-from models import ResumeGithubResponse
+from models import ResumeGithubResponse, ResumeGithubResult, ResumeGithubRaw, MetricItem
 from services.text_utils import parse_skills_from_text
 from services.llm_analyzer import generate_resume_github_advice, generate_overall_evaluation
 
@@ -319,6 +319,43 @@ async def analyze_resume_github(
         ),
     )
 
+    # 5. comparison_result 지표 계산
+    total_unique = len(resume_skills | github_skills)
+    unverified_pct = round(len(unverified_skills) / total_resume * 100) if total_resume else 0
+    discovery_pct = round(len(newly_discovered_skills) / total_unique * 100) if total_unique else 0
+
+    comparison_result = ResumeGithubResult(
+        service="resume-github",
+        overall_score=match_pct,
+        metrics=[
+            MetricItem(
+                key="skill_match",
+                label="기술스택 일치도",
+                score=match_pct,
+                detail=f"이력서 기술 {total_resume}개 중 {verified_count}개 검증",
+            ),
+            MetricItem(
+                key="unverified_rate",
+                label="미검증 기술 비율",
+                score=unverified_pct,
+                detail=f"미검증 {len(unverified_skills)}개 / 이력서 {total_resume}개",
+            ),
+            MetricItem(
+                key="discovery_rate",
+                label="GitHub 추가 발견",
+                score=discovery_pct,
+                detail=f"GitHub에서 {len(newly_discovered_skills)}개 신규 발견",
+            ),
+        ],
+        raw=ResumeGithubRaw(
+            match_pct=match_pct,
+            verified_skills=verified_skills,
+            unverified_skills=unverified_skills,
+            newly_discovered_skills=newly_discovered_skills,
+            overall_evaluation=overall_evaluation,
+        ),
+    )
+
     return ResumeGithubResponse(
         overall_evaluation=overall_evaluation,
         resume_skills=sorted(resume_skills),
@@ -328,4 +365,5 @@ async def analyze_resume_github(
         newly_discovered_skills=newly_discovered_skills,
         supplement_advice=advice["supplement_advice"],
         update_suggestion=advice["update_suggestion"],
+        comparison_result=comparison_result,
     )
