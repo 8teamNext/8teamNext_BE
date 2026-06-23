@@ -289,7 +289,8 @@ async def parse_jobkorea(url: str) -> JobInfo:
 
 
 
-# TEST
+# TEST 실행(아래 명령어)
+# python -m services.parsers.jobkorea_parser "https://www.jobkorea.co.kr/Recruit/GI_Read/49416174"
 
 if __name__ == "__main__":
     import asyncio, sys
