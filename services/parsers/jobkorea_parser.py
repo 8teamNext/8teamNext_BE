@@ -1,17 +1,16 @@
 import re
 import requests
+import json
 from bs4 import BeautifulSoup
 from typing import Optional
 
 from .base import (
     JobInfo,
+    PositionInfo,
     extract_techs_from_text,
     detect_job_type,
-    normalize_tech,
 )
-import json
 
-# 요청 설정 
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -20,312 +19,296 @@ _HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Referer": "https://www.jobkorea.co.kr/",
 }
 
-# 담당업무 섹션 헤딩 키워드
-_TASK_KEYWORDS = ["담당업무", "주요업무", "하는 일", "업무내용", "담당 업무", "주요 업무"]
-
-# 자격/기술 섹션 헤딩 키워드
-_SKILL_KEYWORDS = ["기술스택", "기술 스택", "자격요건", "필요역량", "우대사항", "요구사항",
-                   "스킬", "skill", "requirement", "qualification", "tech"]
+_TASK_KEYWORDS = ["담당업무", "주요업무", "하는 일", "업무내용"]
+_SKILL_KEYWORDS = ["기술스택", "기술 스택", "자격요건", "필요역량", "우대사항", "skill", "tech"]
 
 
-# HTML 파싱 로직 
+
+# IFRAME HTML
+def _fetch_iframe_html(main_html: str) -> Optional[str]:
+    """
+    메인 페이지 HTML에서 iframe src 추출 후
+    iframe 내용을 requests로 가져옴
+    """
+    soup = BeautifulSoup(main_html, "html.parser")
+
+    # iframe[src*='GI_Read_Comt_Ifrm'] 탐색
+    iframe = soup.select_one("iframe[src*='GI_Read_Comt_Ifrm']")
+    if not iframe:
+        return None
+
+    iframe_src = iframe.get("src", "")
+    if not iframe_src:
+        return None
+
+    # 상대경로면 절대경로로
+    if iframe_src.startswith("/"):
+        iframe_url = "https://www.jobkorea.co.kr" + iframe_src
+    else:
+        iframe_url = iframe_src
+
+    try:
+        session = requests.Session()
+        session.get("https://www.jobkorea.co.kr/", headers=_HEADERS, timeout=8)
+        res = session.get(iframe_url, headers=_HEADERS, timeout=12)
+        if res.status_code == 200 and len(res.text) > 500:
+            return res.text
+    except Exception as e:
+        print("iframe fetch 실패:", e)
+
+    return None
+
+# HTML PARSE
+
 def _parse_html(html: str, url: str) -> JobInfo:
+    soup = BeautifulSoup(html, "html.parser")
     info = JobInfo(url=url)
 
-    soup = BeautifulSoup(html, "html.parser")
     info.raw_text = soup.get_text(separator=" ", strip=True)
+    recruitment_items = soup.select(".recruitment-item")
+    print(f"recruitment-item 개수: {len(recruitment_items)}")
+    for i, item in enumerate(recruitment_items):
+        print(f"\n--- ITEM {i} ---")
+        print(item.get_text(strip=True)[:500])
 
-    # JSON-LD 우선 추출
+  
+    # JSON
+
     json_ld = soup.select_one('script[type="application/ld+json"]')
-
     if json_ld and json_ld.string:
         try:
             data = json.loads(json_ld.string)
-
             info.title = data.get("title", "")
-
-            info.company = (
-                data.get("hiringOrganization", {})
-                .get("name", "")
-            )
-
-        except Exception:
+            info.company = data.get("hiringOrganization", {}).get("name", "")
+        except:
             pass
 
-    # OCR URL 탐색
-    ocr_match = re.search(
-        r'https://[^"]+OCR\.html[^"]*',
-        html
-    )
 
-    # ocr_url = None
-    # ocr_text = ""
+    # OCR URL
 
-    # if ocr_match:
-    #     ocr_url = ocr_match.group(0)
-    #     print(f"OCR URL 발견: {ocr_url}")
+    ocr_match = re.search(r'https://[^"]+OCR\.html[^"]*', html)
+    ocr_text = ""
 
-    #     try:
-    #         res = requests.get(
-    #             ocr_url,
-    #             headers=_HEADERS,
-    #             timeout=10
-    #         )
-
-    #         if res.status_code == 200:
-    #             ocr_soup = BeautifulSoup(
-    #                 res.text,
-    #                 "html.parser"
-    #             )
-
-    #             ocr_text = ocr_soup.get_text(
-    #                 separator="\n",
-    #                 strip=True
-    #             )
-
-    #             info.raw_text += "\n" + ocr_text
-
-    #     except Exception as e:
-    #         print("OCR 다운로드 실패:", e)
     if ocr_match:
+        ocr_url = ocr_match.group(0).replace("\\u0026", "&")
+        try:
+            res = requests.get(ocr_url, headers=_HEADERS, timeout=10)
+            if res.status_code == 200:
+                ocr_soup = BeautifulSoup(res.text, "html.parser")
+                ocr_text = ocr_soup.get_text(separator="\n", strip=True)
+                info.raw_text += "\n" + ocr_text
+        except Exception as e:
+            print("OCR 실패:", e)
 
-        ocr_url = (
-        ocr_match.group(0)
-        .replace("\\u0026", "&")
-    )
 
-    # print(f"OCR URL 발견: {ocr_url}")
+    # title fallback
 
-    try:
-
-        res = requests.get(
-            ocr_url,
-            headers=_HEADERS,
-            timeout=10
-        )
-        #디버그
-        # print("OCR STATUS =", res.status_code)
-
-        if res.status_code == 200:
-            #디버그
-            # print("OCR HTML 길이 =", len(res.text))
-            # print(res.text[:500])
-
-            ocr_soup = BeautifulSoup(
-                res.text,
-                "html.parser"
-            )
-
-            ocr_text = ocr_soup.get_text(
-                separator="\n",
-                strip=True
-            )
-            #디버그
-            # print("OCR TEXT 길이 =", len(ocr_text))
-            # print(ocr_text[:1000])
-
-            info.raw_text += "\n" + ocr_text
-
-        else:
-            print("OCR 요청 실패")
-
-    except Exception as e:
-        print("OCR 다운로드 실패:", e)
-
-    # 잡코리아 공고 제목: .tit-job h1 또는 .artReadSub .tit
     if not info.title:
-        for sel in [
-        "main h1",
-        "h1",
-        ".tit-job h1",
-        ".tit-job",
-        "h1.tit",
-    ]:
+        for sel in ["main h1", "h1", ".tit-job h1", ".tit-job", "h1.tit"]:
             el = soup.select_one(sel)
+            if el:
+                info.title = el.get_text(strip=True)
+                break
 
-        if el and el.get_text(strip=True):
-            info.title = el.get_text(strip=True)
-            # break
 
-    #  회사명
+    # company fallback
+
     if not info.company:
-        for sel in [
-        "main h2",
-        "h2",
-        ".coname a",
-        ".name-company",
-        ".corp-name a",
-    ]:
+        for sel in [".coname a", ".name-company", ".corp-name a", "h2", "main h2"]:
             el = soup.select_one(sel)
+            if el:
+                info.company = el.get_text(strip=True)
+                break
 
-        if el and el.get_text(strip=True):
-            info.company = el.get_text(strip=True)
-    #break
 
-    # 구분 (신입/경력/무관) 
-    # 잡코리아는 .tbList 테이블 안에 채용 조건 정보가 있음
+    # job type
+
     recruit_table = soup.select_one(".tbList") or soup.select_one(".info-list")
     if recruit_table:
         info.job_type = detect_job_type(recruit_table.get_text())
-    if not info.job_type:
+    else:
         info.job_type = detect_job_type(info.raw_text)
 
-    # 본문 섹션 파싱 ─
-    # 잡코리아 공고 본문 구조:
-    #   .artReadBody > .artReadBodyRead > 각 섹션
-    #   또는 .jobReadBody > dl > dt(헤딩) + dd(내용)
-    tasks_raw: list[str] = []
-    skills_raw: list[str] = []
+    # 채용상세 parsing
+#여기부터
+    # tasks_raw = []
+    # skills_raw = []
+    tasks_raw = []
+    requirements_raw = []
+    preferred_raw = []
 
-    # 방법 1: dl/dt/dd 구조 (잡코리아 구형 레이아웃)
-    dl_sections = soup.select(".artReadBody dl, .jobReadBody dl, .recruit-read dl")
+    # 기술스택 추출용 원문
+    skills_raw = []
+
+    dl_sections = soup.select("dl")
+
     for dl in dl_sections:
         dt = dl.select_one("dt")
         dd = dl.select_one("dd")
+
         if not dt or not dd:
             continue
-        heading = dt.get_text(strip=True)
-        lines = [l.strip() for l in dd.get_text(separator="\n").splitlines() if l.strip()]
 
-        if any(kw in heading for kw in _TASK_KEYWORDS):
-            tasks_raw = lines
-        elif any(kw.lower() in heading.lower() for kw in _SKILL_KEYWORDS):
+        heading = dt.get_text(strip=True)
+
+        lines = [
+            x.strip()
+            for x in dd.get_text("\n").splitlines()
+            if x.strip()
+        ]
+
+        heading_lower = heading.lower()
+
+        # 담당업무
+        if any(k in heading for k in _TASK_KEYWORDS):
+            tasks_raw.extend(lines)
+
+        # 자격요건
+        elif any(
+            k in heading
+            for k in [
+                "자격요건",
+                "필수사항",
+                "지원자격",
+                "필요역량",
+            ]
+        ):
+            requirements_raw.extend(lines)
             skills_raw.extend(lines)
 
-    # 방법 2: 섹션 헤딩 기반 (잡코리아 신형 레이아웃)
-    if not tasks_raw and not skills_raw:
-        # .recruitInfo, .dev-content 등 컨테이너 내 헤딩 탐색
-        body = (
-            soup.select_one(".artReadBodyRead")
-            or soup.select_one(".jobReadBody")
-            or soup.select_one(".dev-content")
-            or soup.select_one(".cont-wrap")
-            or soup.body
-        )
-        if body:
-            # h3, h4, strong 등 헤딩 역할 태그 탐색
-            headings = body.find_all(["h3", "h4", "h5", "strong", "b"],
-                                      string=lambda t: t and len(t.strip()) < 30)
-            for hel in headings:
-                heading = hel.get_text(strip=True)
-                # 헤딩 다음 형제 또는 부모의 텍스트 수집
-                content_el = hel.find_next_sibling() or hel.parent
-                if not content_el:
-                    continue
-                lines = [l.strip() for l in
-                         content_el.get_text(separator="\n").splitlines()
-                         if l.strip() and l.strip() != heading]
+        elif any(
+            k in heading
+            for k in [
+                "우대사항",
+                "우대조건",
+                "가산점",
+            ]
+        ):
+            preferred_raw.extend(lines)
+            skills_raw.extend(lines)
 
-                if any(kw in heading for kw in _TASK_KEYWORDS):
-                    tasks_raw = lines
-                elif any(kw.lower() in heading.lower() for kw in _SKILL_KEYWORDS):
-                    skills_raw.extend(lines)
+        # 기술스택
+        elif any(k in heading_lower for k in _SKILL_KEYWORDS):
+            skills_raw.extend(lines)
 
-    info.tasks = tasks_raw
-    #디버그
-    # print("raw_text 길이 =", len(info.raw_text))
-    # print(info.raw_text[:2000])
+    if (
+    not tasks_raw
+    and not requirements_raw
+    and not preferred_raw
+):
+        recruitment_items = soup.select(".recruitment-item")
 
-    print("tech_stack =", extract_techs_from_text(info.raw_text))
-    info.tech_stack = extract_techs_from_text(info.raw_text)
+    for item in recruitment_items:
+        text = item.get_text("\n", strip=True)
 
-    print("FORCED =", info.tech_stack)
+        lines = [
+            x.strip()
+            for x in text.splitlines()
+            if x.strip()
+        ]
 
-# ── 기술스택 추출 ──────────────────────────────────────────────────────
-    # tech_source = " ".join(skills_raw)
+        joined = " ".join(lines)
 
-    # if ocr_text:
-    #     tech_source += "\n" + ocr_text
+        if any(k in joined for k in _TASK_KEYWORDS):
+            tasks_raw.extend(lines)
 
-    # if not tech_source.strip():
-    #     tech_source = info.raw_text
+        if any(
+            k in joined
+            for k in [
+                "자격요건",
+                "필수사항",
+                "지원자격",
+                "필요역량",
+            ]
+        ):
+            requirements_raw.extend(lines)
+            skills_raw.extend(lines)
 
-# 무조건 실행
-    
-    # info.tech_stack = extract_techs_from_text(tech_source)
+        if any(
+            k in joined
+            for k in [
+                "우대사항",
+                "우대조건",
+            ]
+        ):
+            preferred_raw.extend(lines)
+            skills_raw.extend(lines)
 
-    # parsed = extract_techs_from_text(tech_source)
 
-    # print("parsed =", parsed)
+# ------------------------------------------------
+# 기술스택 원문 생성
+# ------------------------------------------------
 
-    # info.tech_stack = parsed
+    tech_source_parts = []
 
-    print("assigned =", info.tech_stack)
+    tech_source_parts.extend(skills_raw)
+    tech_source_parts.extend(requirements_raw)
+    tech_source_parts.extend(preferred_raw)
 
-    print("info.tech_stack =", info.tech_stack)
+    if ocr_text:
+        tech_source_parts.append(ocr_text)
 
-    print("title =", info.title)
-    print("company =", info.company)
-    print("job_type =", info.job_type)
-    print("INFO ID =", id(info))
-    print("RETURN INFO =", info.tech_stack)
+    if not tech_source_parts:
+        tech_source_parts.append(info.raw_text)
+
+    tech_source_text = "\n".join(tech_source_parts)
+
+
+    # ------------------------------------------------
+    # Position 생성
+    # ------------------------------------------------
+
+    position = PositionInfo(
+        position_name=None,
+        tasks=tasks_raw,
+        requirements=requirements_raw,
+        preferred=preferred_raw,
+        tech_stack=extract_techs_from_text(
+            tech_source_text
+        ),
+    )
+
+    info.positions = [position]
+
+
+    # ------------------------------------------------
+    # 전체 공고 기술스택
+    # ------------------------------------------------
+
+    info.tech_stack = sorted(
+        {
+            skill
+            for pos in info.positions
+            for skill in pos.tech_stack
+        }
+    )
 
     return info
+        
 
 
 
+# requests
 
-# ── requests 기반 파싱 ────────────────────────────────────────────────────
 def _fetch_with_requests(url: str) -> Optional[str]:
-    """HTML 반환, 실패 시 None."""
-    session = requests.Session()
     try:
-        # 쿠키 획득을 위해 메인 페이지 선방문
+        session = requests.Session()
         session.get("https://www.jobkorea.co.kr/", headers=_HEADERS, timeout=8)
         res = session.get(url, headers=_HEADERS, timeout=12)
+
         if res.status_code == 200 and len(res.text) > 1000:
             return res.text
-        return None
-    except Exception:
-        return None
+    except:
+        pass
+    return None
 
 
-# ── Playwright 폴백 ───────────────────────────────────────────────────────
-# async def _fetch_with_playwright(url: str) -> Optional[str]:
-#     """requests 실패 시 Playwright headless로 재시도."""
-#     try:
-#         from playwright.async_api import async_playwright
-#     except ImportError:
-#         return None
 
-#     async with async_playwright() as p:
-#         browser = await p.chromium.launch(headless=True)
+# playwright
 
-#         context = await browser.new_context(
-#             user_agent=_HEADERS["User-Agent"],
-#             locale="ko-KR",
-#         )
-
-#         page = await context.new_page()
-
-#         try:
-#             await page.goto(
-#                 url,
-#                 wait_until="networkidle",
-#                 timeout=20_000
-#             )
-
-#             # JS 렌더링 추가 대기
-#             await page.wait_for_timeout(3000)
-
-#             html = await page.content()
-
-#             return html
-
-#         except Exception as e:
-#             print("Playwright 오류:", e)
-#             return None
-
-#         finally:
-#             await browser.close()
 async def _fetch_with_playwright(url: str) -> Optional[str]:
-    """requests 실패 시 Playwright headless로 재시도."""
     try:
         from playwright.async_api import async_playwright
     except ImportError:
@@ -342,27 +325,18 @@ async def _fetch_with_playwright(url: str) -> Optional[str]:
         page = await context.new_page()
 
         try:
-            await page.goto(
-                url,
-                wait_until="networkidle",
-                timeout=20_000
-            )
+            await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            await page.wait_for_load_state("networkidle")
+            await page.wait_for_timeout(4000)
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(2000)
 
-            # JS 렌더링 대기
-            await page.wait_for_timeout(3000)
+            try:
+                await page.wait_for_selector("main", timeout=10000)
+            except:
+                pass
 
             html = await page.content()
-
-            # 추가
-            # with open(
-            #     "playwright_debug.html",
-            #     "w",
-            #     encoding="utf-8"
-            # ) as f:
-            #     f.write(html)
-
-            # print("playwright_debug.html 생성 완료")
-
             return html
 
         except Exception as e:
@@ -372,79 +346,63 @@ async def _fetch_with_playwright(url: str) -> Optional[str]:
         finally:
             await browser.close()
 
-#  공개 인터페이스
-def parse_jobkorea_sync(url: str) -> JobInfo:
-    """동기 버전 (requests 전용, Playwright 폴백 없음)."""
-    info = JobInfo(url=url)
-    html = _fetch_with_requests(url)
-    if not html:
-        info.error = "requests 요청 실패 (403 또는 타임아웃). parse_jobkorea() 비동기 버전을 사용하세요."
-        return info
-    return _parse_html(html, url)
 
+# ASYNC MAIN
 
 async def parse_jobkorea(url: str) -> JobInfo:
-    """
-    비동기 버전. requests 우선 시도 → 실패 시 Playwright 폴백.
-
-    사용 예:
-        info = await parse_jobkorea("https://www.jobkorea.co.kr/Recruit/GI_Read/Do?Recd_No=...")
-    """
-    # info = JobInfo(url=url)
-
-    # # 1차: requests (빠름, 가벼움)
-    # html = _fetch_with_requests(url)
-
-    # # 2차: Playwright (JS 렌더링 필요하거나 403 시)
-    # if not html:
-    #     html = await _fetch_with_playwright(url)
-
-    # if not html:
-    #     info.error = "페이지 로드 실패 (requests + Playwright 모두 실패)"
-    #     return info
-
-    # return _parse_html(html, url)
     info = JobInfo(url=url)
 
+    # 1. Playwright로 메인 페이지 가져오기
     html = await _fetch_with_playwright(url)
 
-    # html = _fetch_with_requests(url)
-
-    # if not html:
-    #     html = await _fetch_with_playwright(url)
+    if not html:
+        html = _fetch_with_requests(url)
 
     if not html:
-        info.error = "페이지 로드 실패 (requests + Playwright 모두 실패)"
+        info.error = "페이지 로드 실패"
         return info
 
-    # 디버그용
-    # with open("debug.html", "w", encoding="utf-8") as f:
-    #     f.write(html)
+    # 2. 메인 페이지에서 JSON-LD로 title/company 추출
+    #    + iframe URL 추출 후 iframe 내용으로 파싱
+    iframe_html = _fetch_iframe_html(html)
 
-    # print("debug.html 생성 완료")
+    if iframe_html:
+        # iframe 내용으로 recruitment-item 파싱
+        result = _parse_html(iframe_html, url)
 
-    # print("지원자격:", "지원자격" in html)
+        # title/company는 메인 페이지 JSON가 더 정확하므로 덮어쓰기
+        main_soup = BeautifulSoup(html, "html.parser")
+        json_ld = main_soup.select_one('script[type="application/ld+json"]')
+        if json_ld and json_ld.string:
+            try:
+                data = json.loads(json_ld.string)
+                title = data.get("title", "")
+                company = data.get("hiringOrganization", {}).get("name", "")
+                if title:
+                    result.title = title
+                if company:
+                    result.company = company
+            except:
+                pass
 
-    # idx = html.find("지원자격")
+        # job_type도 메인 페이지에서 다시 추출
+        if not result.job_type:
+            result.job_type = detect_job_type(main_soup.get_text())
 
-    #지원자격 주변내용 출력(디버깅)
-    # if idx != -1:
-    #     print("\n=== 지원자격 주변 내용 ===")
-    #     print(html[idx:idx+2000])
+        return result
 
+    # iframe 없으면 메인 페이지로 파싱 (기존 방식)
     return _parse_html(html, url)
 
 
-    # return _parse_html(html, url)
 
+# TEST 실행(아래 명령어)
+# python -m services.parsers.jobkorea_parser "https://www.jobkorea.co.kr/Recruit/GI_Read/49416174"
 
-# 실행 예시
 if __name__ == "__main__":
-    import asyncio, json, sys
-#공고url
-    url = sys.argv[1] if len(sys.argv) > 1 else (
-        "https://www.jobkorea.co.kr/Recruit/GI_Read/49354072?Oem_Code=C1&rPageCode=TL&sc=416"
-    )
+    import asyncio, sys
+
+    url = sys.argv[1]
 
     async def main():
         result = await parse_jobkorea(url)

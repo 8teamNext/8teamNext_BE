@@ -1,12 +1,28 @@
+import asyncio
 import uuid
 import re
-import asyncio
 from datetime import datetime
+from dotenv import load_dotenv
+load_dotenv()
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
-from services.crawler import crawler_bp
+from services.crawler import crawler_bp 
 from services.parsers.jobkorea_parser_v2 import parse_jobkorea
+from services.github_analyzer import analyze_github
+from services.github_service import test_github
+from services.llm_service import infer_skills
+from services.matching_service import match_all
+
+from models import (
+    GithubAnalysisRequest, GithubAnalysisResponse,
+    GapAnalysisRequest, GapAnalysisResponse,
+    ResumeGithubRequest, ResumeGithubResponse,
+    InterviewGenRequest, InterviewGenResponse,
+    CoverLetterCompareRequest, CoverLetterCompareResponse,
+    UserProfile, AnalysisHistoryItem,
+    UnifiedAnalysisRequest, UnifiedAnalysisResponse
+)
 
 def _crawl_jobkorea(url: str):
     """동기 컨텍스트에서 Playwright 비동기 크롤러 실행."""
@@ -19,18 +35,6 @@ def _crawl_jobkorea(url: str):
         asyncio.set_event_loop(None)
 
 _JOBKOREA_URL_RE = re.compile(r'^https?://(?:www\.)?jobkorea\.co\.kr/', re.IGNORECASE)
-
-
-
-from models import (
-    GithubAnalysisRequest, GithubAnalysisResponse,
-    GapAnalysisRequest, GapAnalysisResponse,
-    ResumeGithubRequest, ResumeGithubResponse,
-    InterviewGenRequest, InterviewGenResponse,
-    CoverLetterCompareRequest, CoverLetterCompareResponse,
-    UserProfile, AnalysisHistoryItem,
-    UnifiedAnalysisRequest, UnifiedAnalysisResponse
-)
 
 # Import services
 from services.github_analyzer import analyze_github
@@ -45,51 +49,10 @@ app = Flask(__name__)
 # Configure CORS
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# In-memory session store
-db_profile = UserProfile(
-    email="user@example.com",
-    name="김코딩",
-    github_username="kimcoding-dev",
-    default_resume="""[김코딩 - 백엔드 개발자 이력서]
-이메일: user@example.com | GitHub: github.com/kimcoding-dev
+# In-memory session store (빈 상태로 시작 — 사용자가 마이페이지에서 직접 입력)
+db_profile = UserProfile()
 
-[기술 스택]
-Java, Spring Boot, Spring Data JPA, MySQL, Git, Docker, HTML/CSS
-
-[프로젝트 경험]
-1. 도서 대여 관리 시스템 API (개인 프로젝트)
-- Spring Boot와 Spring Data JPA를 사용해 백엔드 API 설계
-- H2 데이터베이스 및 MySQL을 연동해 영속성 계층 구현
-- RESTful 규칙에 따른 API 엔드포인트 설계
-
-2. 포토 갤러리 공유 플랫폼 (팀 프로젝트)
-- 프론트엔드 HTML/CSS 및 자바스크립트 구현 담당
-- Spring Boot 백엔드 서버 연동 및 REST API 요청 데이터 바인딩
-""",
-    default_cover_letter="""어릴 적부터 컴퓨터를 조작하고 새로운 프로그램을 구동하는 것에 흥미가 깊었습니다. 
-대학교 재학 중 웹 프로그래밍 과목을 수강하면서 웹 백엔드 시스템 개발에 매력을 느끼게 되었습니다. 
-이후 독학으로 Spring Boot 프레임워크를 학습하며 여러 REST API 서버를 구현해보았습니다. 
-
-특히 데이터가 저장되고 데이터베이스 쿼리가 수행되는 흐름에 관심이 많아 JPA와 관련된 강의를 듣고 실습했습니다. 
-프로젝트 과정에서 팀원들과 적극적으로 의견을 주고받으며 협업하여 성공적으로 배포한 경험이 있습니다.
-신입 백엔드 개발자로서 맡은 일에 성실히 책임을 다하며 회사와 함께 빠르게 성장하고 싶습니다.
-"""
-)
-
-db_history: List[AnalysisHistoryItem] = [
-    AnalysisHistoryItem(
-        id="hist-1",
-        type="github",
-        date="2026-06-12 14:30",
-        summary="GitHub Repository 분석 (A+ 등급, 72% 적합도)"
-    ),
-    AnalysisHistoryItem(
-        id="hist-2",
-        type="resume-github",
-        date="2026-06-13 11:15",
-        summary="이력서-GitHub 연계 신뢰성 분석 완료 (일치율 75%)"
-    )
-]
+db_history: List[AnalysisHistoryItem] = []
 
 # --- Endpoints ---
 
@@ -140,17 +103,155 @@ def api_analyze_github():
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"GitHub analysis failed: {str(e)}"}), 500
+    
+# """
+#     POST /api/analyze
+#     body: {
+#         "github_username": "kimcoding",
+#         "job_urls": ["https://www.jobkorea.co.kr/..."]
+#     }
+ 
+#     반환:
+#     {
+#         "github": {
+#             "username": "kimcoding",
+#             "confirmed_skills": ["TypeScript", "JavaScript"],
+#             "inferred_skills": ["React", "Next.js"],
+#             "raw_languages": {"TypeScript": 60.5, ...}
+#         },
+#         "matching": [
+#             {
+#                 "url_index": 0,
+#                 "status": "success",
+#                 "title": "프론트엔드 개발자",
+#                 "company": "회사명",
+#                 "job_type": "신입",
+#                 "jd_total": 3,
+#                 "confirmed_score": 66.7,
+#                 "inferred_score": 33.3,
+#                 "confirmed_matched": ["TypeScript"],
+#                 "inferred_matched": ["React"],
+#                 "missing": ["Docker"],
+#                 "extra_confirmed": ["JavaScript"]
+#             }
+#         ]
+#     }
+#     """
+
+@app.route("/api/analyze", methods=["POST"])
+async def api_analyze():
+    data = request.get_json(silent=True)
+ 
+    # 검증
+    if not data:
+        return jsonify({"error": "요청 body가 없습니다."}), 400
+ 
+    github_username = data.get("github_username", "").strip()
+    job_urls = data.get("job_urls", [])
+ 
+    if not github_username:
+        return jsonify({"error": "github_username이 필요합니다."}), 400
+ 
+    if not isinstance(job_urls, list) or len(job_urls) == 0:
+        return jsonify({"error": "job_urls는 1개 이상이어야 합니다."}), 400
+ 
+    if len(job_urls) > 5:
+        return jsonify({"error": "job_urls는 최대 5개까지 가능합니다."}), 400
+ 
+    for url in job_urls:
+        if not isinstance(url, str) or not url.startswith("http"):
+            return jsonify({"error": f"올바르지 않은 URL: {url}"}), 400
+ 
+    # GitHub 분석 + 크롤링 병렬 실행
+    import asyncio
+    from services.github_service import test_github
+    from services.llm_service import infer_skills
+    from services.parsers.parser_router import parse_job
+ 
+    async def crawl_all(urls: list[str]) -> list[dict]:
+        tasks = [parse_job(url) for url in urls]
+        results = await asyncio.gather(*tasks)
+        crawl_results = []
+        for i, result in enumerate(results):
+            d = result.to_dict()
+            if d.get("error"):
+                crawl_results.append({
+                    "url_index": i,
+                    "status": "failed",
+                    "error": d["error"],
+                })
+            else:
+                crawl_results.append({
+                    "url_index": i,
+                    "status": "success",
+                    "title": d.get("title", ""),
+                    "company": d.get("company", ""),
+                    "job_type": d.get("job_type", ""),
+                    "tech_stack": d.get("tech_stack", []),
+                    "positions": d.get("positions", []),
+                })
+        return crawl_results
+ 
+    async def github_analyze(username: str) -> dict:
+        github_result = await test_github(username)
+        if github_result.get("error"):
+            return {"error": github_result["error"]}
+        skill_result = await infer_skills(
+            username=username,
+            languages=github_result["languages"],
+            topics=github_result["topics"],
+            package_skills=github_result.get("package_skills", []),
+        )
+        return {
+            "username": username,
+            "confirmed_skills": skill_result["confirmed"],
+            "inferred_skills": skill_result["inferred"],
+            "raw_languages": github_result["languages"],
+            "package_skills": github_result.get("package_skills", []),
+            "error": None,
+        }
+ 
+    # 병렬 실행
+    crawl_result, github_result = await asyncio.gather(
+        crawl_all(job_urls),
+        github_analyze(github_username),
+    )
+ 
+    # GitHub 분석 실패
+    if github_result.get("error"):
+        status = 404 if "찾을 수 없습니다" in github_result["error"] else 400
+        return jsonify({"error": github_result["error"]}), status
+ 
+    # 매칭 계산
+    matching = match_all(
+        confirmed_skills=github_result["confirmed_skills"],
+        inferred_skills=github_result["inferred_skills"],
+        crawl_results=crawl_result,
+    )
+ 
+    return jsonify({
+        "github": {
+            "username": github_result["username"],
+            "confirmed_skills": github_result["confirmed_skills"],
+            "inferred_skills": github_result["inferred_skills"],
+            "raw_languages": github_result["raw_languages"],
+            "package_skills": github_result.get("package_skills", []),
+        },
+        "matching": matching,
+    })
+
+
 
 @app.route("/api/analyze/gap", methods=["POST"])
-def api_analyze_gap():
+async def api_analyze_gap():
     try:
         data = request.get_json()
         payload = GapAnalysisRequest.model_validate(data)
-        
+
         # If resume_text is empty, fallback to the saved profile resume
         resume = payload.resume_text if payload.resume_text else db_profile.default_resume
-        
-        response = analyze_gap(payload.repo_urls, resume, payload.job_urls)
+
+        response = await analyze_gap(payload.repo_urls, resume, payload.job_urls)
         
         # Save to history
         new_hist = AnalysisHistoryItem(
@@ -260,11 +361,11 @@ def api_analyze_interview_questions():
         return jsonify({"detail": f"Interview question generation failed: {str(e)}"}), 500
 
 @app.route("/api/analyze/cover-letter-compare", methods=["POST"])
-def api_analyze_cover_letter_compare():
+async def api_analyze_cover_letter_compare():
     try:
         data = request.get_json()
         payload = CoverLetterCompareRequest.model_validate(data)
-        response = compare_cover_letters(payload.original_text, payload.improved_text)
+        response = await compare_cover_letters(payload.original_text, payload.improved_text)
         
         # Save to history
         new_hist = AnalysisHistoryItem(
@@ -279,83 +380,237 @@ def api_analyze_cover_letter_compare():
     except Exception as e:
         return jsonify({"detail": f"Cover letter comparison failed: {str(e)}"}), 500
 
+@app.route("/api/github/preview", methods=["GET"])
+async def api_github_preview():
+    username = request.args.get("username", "").strip()
+
+    if not username:
+        return jsonify({"error": "username 파라미터가 필요합니다."}), 400
+
+    github_result = await test_github(username)
+
+    if github_result.get("error"):
+        status = 404 if "찾을 수 없습니다" in github_result["error"] else 400
+        return jsonify({"error": github_result["error"]}), status
+
+    skill_result = await infer_skills(
+        username=username,
+        languages=github_result["languages"],
+        topics=github_result["topics"],
+        package_skills=github_result.get("package_skills", []),  # 추가
+    )
+
+    return jsonify({
+        "username": username,
+        "confirmed_skills": skill_result["confirmed"],
+        "inferred_skills": skill_result["inferred"],
+        "raw_languages": github_result["languages"],
+    })
+
+
 @app.route("/api/analyze/unified", methods=["POST"])
-def api_analyze_unified():
+async def api_analyze_unified():
     try:
         from models import UnifiedGithubPart, UnifiedResumePart, UnifiedGapPart
         data = request.get_json()
         payload = UnifiedAnalysisRequest.model_validate(data)
-        
-        # Use URLs provided by user
+
+        from services.github_analyzer import extract_username, LANGUAGE_TO_SKILL
         job_urls = payload.job_urls if payload.job_urls else ["https://toss.im/career/job-detail/backend-developer"]
-        
-        # 1. Run GitHub analysis
-        github_res = analyze_github([payload.github_url], job_urls)
-        
-        # 2. Run Resume verification matching
-        resume_res = match_resume_github(
+        username = extract_username(payload.github_url)
+        print(f"\n=== 분석 시작 ===")
+        print(f"github_url: {payload.github_url}")
+        print(f"username: {username}")
+        print(f"resume 앞 100자: {payload.resume_text[:100]}")
+
+        from services.llm_analyzer import extract_skills_from_resume, generate_analysis_comment
+
+        # 1. GitHub 분석 + Gap 분석 + LLM 이력서 기술 추출 병렬 실행
+        github_res, gap_res, llm_resume_skills = await asyncio.gather(
+            analyze_github([payload.github_url], job_urls),
+            analyze_gap([payload.github_url], payload.resume_text, job_urls),
+            extract_skills_from_resume(payload.resume_text),
+        )
+        print(f"github strong_skills: {github_res.strong_skills}")
+        print(f"github repo_details 수: {len(github_res.repo_details)}")
+        print(f"active_weeks: {github_res.active_weeks}, total_commits: {github_res.total_commits}")
+        print(f"LLM 이력서 기술 추출: {llm_resume_skills}")
+
+        # 2. 이력서-GitHub 기술 대조 (LLM 추출 기술 우선, 없으면 키워드 매칭 폴백)
+        resume_res = await match_resume_github(
             payload.resume_text,
             None,
-            "kimcoding-dev",
-            github_res.strong_skills
+            username,
+            github_res.strong_skills,
+            llm_skills=llm_resume_skills if llm_resume_skills else None,
         )
-        
-        # 3. Run Gap analysis
-        gap_res = analyze_gap([payload.github_url], payload.resume_text, job_urls)
-        
-        # Build pieces
-        readme_q = github_res.repo_details[0].readme_status if github_res.repo_details else "우수"
-        completeness = "매우 우수" if github_res.overall_job_fit >= 80 else "보통 (클린 아키텍처 패턴은 우수하나 리드미 설명 보완 필요)"
-        
+
+        # GitHub 파트 조립
+        total_commits = sum(r.commit_count for r in github_res.repo_details)
+        readme_statuses = [r.readme_status for r in github_res.repo_details]
+        good_count = sum(1 for s in readme_statuses if s == "우수")
+        readme_q = "우수" if good_count >= len(readme_statuses) * 0.6 else "보통" if good_count > 0 else "미흡"
+        completeness = "매우 우수" if github_res.overall_job_fit >= 80 else "보통"
+
+        total_commits = sum(r.commit_count for r in github_res.repo_details)
+        active_weeks = github_res.active_weeks
+        readme_statuses = [r.readme_status for r in github_res.repo_details]
+        good_count = sum(1 for s in readme_statuses if s == "우수")
+        readme_q = "우수" if good_count >= max(len(readme_statuses) * 0.6, 1) else "보통" if good_count > 0 else "미흡"
+        completeness = "매우 우수" if github_res.overall_job_fit >= 80 else "보통"
+
         github_part = UnifiedGithubPart(
             repo_count=len(github_res.repo_details),
+            total_commits=total_commits,
             tech_stack=github_res.strong_skills,
             readme_quality=readme_q,
             project_completeness=completeness,
             readme_suggestions=github_res.readme_suggestions,
-            repo_details=github_res.repo_details
+            repo_details=github_res.repo_details,
         )
-        
+
         verified_count = len(resume_res.verified_skills)
         total_resume = len(resume_res.resume_skills)
-        matching_pct = int((verified_count / max(total_resume, 1)) * 100)
-        
+        matching_pct = int(verified_count / max(total_resume, 1) * 100)
+
+        resume_quality_comment = (
+            f"이력서 기재 {total_resume}개 기술 중 {verified_count}개({matching_pct}%)가 GitHub 실제 코드에서 검증되었습니다."
+            if total_resume > 0
+            else "이력서에서 기술 스택을 추출하지 못했습니다."
+        )
+
         resume_part = UnifiedResumePart(
-            resume_quality="매우 우수" if matching_pct >= 85 else "보통 (일부 기재 기술에 대한 GitHub 코드 증빙 보완 필요)",
+            resume_quality=resume_quality_comment,
             tech_stack_matching=matching_pct,
             verified_skills=resume_res.verified_skills,
             unverified_skills=resume_res.unverified_skills,
-            missing_skills=github_res.weak_skills
+            missing_skills=github_res.weak_skills,
         )
-        
-        learning_roadmap = [
-            f"1단계: 부족한 기술인 {github_res.weak_skills[0]}의 기본 동작 원리를 실무 미니 예제로 구현" if len(github_res.weak_skills) > 0 else "1단계: Docker 컨테이너 및 인프라 구조 개념 학습",
-            f"2단계: {github_res.weak_skills[1] if len(github_res.weak_skills) > 1 else 'AWS 클라우드'}를 활용한 분산 환경 무중단 배포 적용" if len(github_res.weak_skills) > 0 else "2단계: AWS ECS 및 RDS 인프라 배포 자동화 파이프라인 연동",
-            "3단계: 아키텍처 다이어그램 설계와 상세 트러블슈팅 로그를 깃허브 README에 명시화"
-        ]
-        
+
+        # 로드맵: 미보유 기술 기반으로 동적 생성
+        missing = github_res.weak_skills
+        learning_roadmap = []
+        for i, skill in enumerate(missing[:3], 1):
+            learning_roadmap.append(f"{i}단계: {skill} 기초 프로젝트를 직접 구현하고 GitHub에 커밋하여 포트폴리오에 증빙 추가")
+        if not learning_roadmap:
+            learning_roadmap = ["현재 기술 스택이 채용 요구 사항을 충족합니다. 심화 프로젝트로 깊이를 더하세요."]
+
         gap_part = UnifiedGapPart(
-            missing_technologies=github_res.weak_skills,
-            learning_roadmap=learning_roadmap
+            missing_technologies=missing,
+            learning_roadmap=learning_roadmap,
         )
-        
-        overall_score = int((github_res.overall_job_fit + matching_pct) / 2)
-        
+
+        # ── 4개 지표 계산 ─────────────────────────────────────────────────────
+        from services.text_utils import normalize_skill_set
+        # 1. 기술스택 일치도: 이력서 기술 중 GitHub에서 증명된 비율 (이력서 기준)
+        github_skill_set = normalize_skill_set(set(github_res.strong_skills))
+        resume_skill_set = normalize_skill_set(set(resume_res.resume_skills))
+        intersection = github_skill_set & resume_skill_set
+        skill_match_pct = int(len(intersection) / max(len(resume_skill_set), 1) * 100)
+
+        # 2. 깃 커밋: active_weeks, total_commits (github_res에서 가져옴)
+
+        # 3. 레포 기술 커버리지: 이력서 기술이 사용된 레포 비율
+        relevant_repos = sum(
+            1 for r in github_res.repo_details
+            if resume_skill_set & set(LANGUAGE_TO_SKILL.get(l, l) for l in r.languages)
+        )
+        repo_coverage_pct = int(relevant_repos / max(len(github_res.repo_details), 1) * 100)
+
+        # 4. 공개 레포 수 (단순 카운트)
+        repo_count = len(github_res.repo_details)
+
+        # 전체 매칭 비율 (3개 항목 동일 가중치 33.3%씩)
+        commit_activity_pct = min(int(active_weeks / 52 * 100), 100)
+        overall_match_pct = int(
+            (skill_match_pct + commit_activity_pct + repo_coverage_pct) / 3
+        )
+
+        print("\n+---------------------------------------------+")
+        print("|        [resume-github analysis result]      |")
+        print("+---------------------------------------------+")
+        print(f"| resume skills ({len(resume_skill_set)}): {sorted(resume_skill_set)}")
+        print(f"| github skills ({len(github_skill_set)}): {sorted(github_skill_set)}")
+        print(f"| matched       ({len(intersection)}): {sorted(intersection)}")
+        print("+---------------------------------------------+")
+        print(f"| skill_match_pct    : {skill_match_pct:>3}%  ({len(intersection)}/{len(resume_skill_set)} skills proven)")
+        print(f"| commit_activity_pct: {commit_activity_pct:>3}%  ({active_weeks}/52 weeks, {total_commits} commits)")
+        print(f"| repo_coverage_pct  : {repo_coverage_pct:>3}%  ({relevant_repos}/{repo_count} repos)")
+        print("+---------------------------------------------+")
+        print(f"| service      : resume-github")
+        print(f"| overall_score: {overall_match_pct}%")
+        print("+---------------------------------------------+\n")
+
+        # LLM 총평 생성
+        ai_comment = await generate_analysis_comment(
+            skill_match_pct=skill_match_pct,
+            commit_activity_pct=commit_activity_pct,
+            repo_coverage_pct=repo_coverage_pct,
+            overall_score=overall_match_pct,
+            matched_skills=sorted(intersection),
+            unmatched_skills=sorted(resume_skill_set - github_skill_set),
+            total_commits=total_commits,
+            active_weeks=active_weeks,
+            repo_count=repo_count,
+        )
+        print(f"  [LLM] 총평:\n{ai_comment}\n")
+
+        # 종합 페이지 공통 포맷 조립
+        from models import ComparisonResult, ComparisonRaw, MetricItem
+        comparison_result = ComparisonResult(
+            service="resume-github",
+            overall_score=overall_match_pct,
+            metrics=[
+                MetricItem(
+                    key="skill_match",
+                    label="기술스택 일치도",
+                    score=skill_match_pct,
+                    detail=f"이력서 기술 {len(resume_skill_set)}개 중 {len(intersection)}개 증명"
+                ),
+                MetricItem(
+                    key="commit_activity",
+                    label="깃 커밋 활동",
+                    score=commit_activity_pct,
+                    detail=f"{active_weeks}/52주 · 총 {total_commits}커밋"
+                ),
+                MetricItem(
+                    key="repo_coverage",
+                    label="레포 기술 커버리지",
+                    score=repo_coverage_pct,
+                    detail=f"관련 레포 {relevant_repos}/{repo_count}개"
+                ),
+            ],
+            raw=ComparisonRaw(
+                active_weeks=active_weeks,
+                total_commits=total_commits,
+                repo_count=repo_count,
+                matched_skills=sorted(intersection),
+                unmatched_skills=sorted(resume_skill_set - github_skill_set),
+            ),
+            ai_comment=ai_comment,
+        )
+
         response = UnifiedAnalysisResponse(
-            overall_score=overall_score,
             portfolio_rating=github_res.portfolio_rating,
+            overall_match_pct=overall_match_pct,
+            skill_match_pct=skill_match_pct,
+            active_weeks=active_weeks,
+            total_commits=total_commits,
+            repo_coverage_pct=repo_coverage_pct,
+            repo_count=repo_count,
             github_analysis=github_part,
             resume_analysis=resume_part,
             skill_gap=gap_part,
-            recommended_projects=gap_res.recommended_projects
+            recommended_projects=gap_res.recommended_projects,
+            comparison_result=comparison_result,
         )
-        
+
         # Save to history
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",
             type="gap",
             date=datetime.now().strftime("%Y-%m-%d %H:%M"),
-            summary=f"종합 커리어 진단 완료: 점수 {overall_score}점, A+ 등급"
+            summary=f"종합 커리어 진단: 기술일치도 {skill_match_pct}%, 활동 {active_weeks}주, 레포 {len(github_res.repo_details)}개"
         )
         db_history.insert(0, new_hist)
         
@@ -366,29 +621,32 @@ def api_analyze_unified():
 # --- Profile and History Session endpoints ---
 
 @app.route("/api/profile", methods=["GET"])
-def get_profile():
+async def get_profile():
     return jsonify(db_profile.model_dump())
 
 @app.route("/api/profile", methods=["POST"])
-def update_profile():
+async def update_profile():
     global db_profile
     try:
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True)
+        if data is None:
+            return jsonify({"detail": "Invalid or missing JSON body"}), 400
         db_profile = UserProfile.model_validate(data)
         return jsonify(db_profile.model_dump())
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"detail": f"Profile update failed: {str(e)}"}), 400
 
 @app.route("/api/history", methods=["GET"])
-def get_history():
+async def get_history():
     return jsonify([item.model_dump() for item in db_history])
 
 @app.route("/api/history/<id>", methods=["DELETE"])
-def delete_history_item(id):
+async def delete_history_item(id):
     global db_history
     db_history = [item for item in db_history if item.id != id]
     return jsonify({"status": "success", "message": "History item deleted"})
-
 
 if __name__ == '__main__':
     app.run(port=8000, debug=True)

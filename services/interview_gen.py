@@ -2,7 +2,7 @@ import re
 from typing import List
 from models import InterviewGenResponse, InterviewQuestion
 
-def generate_interview_questions(cover_letter: str) -> InterviewGenResponse:
+async def generate_interview_questions(cover_letter: str) -> InterviewGenResponse:
     questions = []
     cl_lower = cover_letter.lower()
     

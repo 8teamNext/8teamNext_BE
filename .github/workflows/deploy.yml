@@ -2,7 +2,6 @@ name: Deploy
 
 on:
   push:
-  pull_request:
     branches:
       - main
 
@@ -20,6 +19,6 @@ jobs:
           script: |
             cd /var/www/flask/8teamNext_BE
             git pull origin main
-            npm install -r requirements.txt
+            /developers/minicoda3/envs/spcvenv/bin/pip install -r requirements.txt
             sudo systemctl daemon-reload
             sudo systemctl restart flask

@@ -1,5 +1,5 @@
 # Debug files
-debug.html
+*debug.html
 playwright_debug.html
 
 # Python cache
@@ -16,3 +16,5 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+# __pycache__
+__pycache__
