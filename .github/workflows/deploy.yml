@@ -20,5 +20,6 @@ jobs:
             cd /var/www/flask/8teamNext_BE
             git pull origin main
             /developers/minicoda3/envs/spcvenv/bin/pip install -r requirements.txt
+            /developers/minicoda3/envs/spcvenv/bin/python -m playwright install chromium
             sudo systemctl daemon-reload
             sudo systemctl restart flask
