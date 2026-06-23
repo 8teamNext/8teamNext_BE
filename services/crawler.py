@@ -32,6 +32,7 @@ async def _parse_with_index(index: int, url: str) -> dict:
             "company": d.get("company", ""),
             "job_type": d.get("job_type", ""),
             "tech_stack": d.get("tech_stack", []),
+            "positions": d.get("positions", []),  # 세부직무 포함
             "tasks": d.get("tasks", []),
         }
 
@@ -43,11 +44,10 @@ async def _parse_with_index(index: int, url: str) -> dict:
         }
 
 
-@crawler_bp.route("/api/crawl", methods=["POST"])
+@crawler_bp.route("/crawl", methods=["POST"])
 async def crawl():
     data = request.get_json(silent=True)
 
-    # 요청 검증
     if not data or "urls" not in data:
         return jsonify({"error": "urls 필드가 필요합니다."}), 400
 
@@ -59,12 +59,10 @@ async def crawl():
     if len(urls) > 5:
         return jsonify({"error": "urls는 최대 5개까지 입력 가능합니다."}), 400
 
-    # URL 형식 기본 검증
     for url in urls:
         if not isinstance(url, str) or not url.startswith("http"):
             return jsonify({"error": f"올바르지 않은 URL 형식입니다: {url}"}), 400
 
-    # 병렬 파싱
     tasks = [_parse_with_index(i, url) for i, url in enumerate(urls)]
     results = await asyncio.gather(*tasks)
 

@@ -21,8 +21,8 @@ TECH_ALIASES: dict[str, str] = {
     "kubeflow": "Kubeflow",
     "llm": "LLM",
     "rag": "RAG",
-    
-    # 프론트엔드 / 자바스크립트 
+
+    # 프론트엔드
     "react.js": "React", "reactjs": "React", "react": "React",
     "vue.js": "Vue", "vuejs": "Vue", "vue": "Vue",
     "next.js": "Next.js", "nextjs": "Next.js",
@@ -30,10 +30,10 @@ TECH_ALIASES: dict[str, str] = {
     "node.js": "Node.js", "nodejs": "Node.js",
     "typescript": "TypeScript", "ts": "TypeScript",
     "javascript": "JavaScript", "js": "JavaScript",
-    
-    # 백엔드 / 메인 언어 및 프레임워크
+
+    # 백엔드
     "python": "Python",
-    "java": "Java", "자바": "Java",  # lower() 처리되므로 소문자 키 위주로 구성
+    "java": "Java", "자바": "Java",
     "kotlin": "Kotlin",
     "swift": "Swift",
     "spring boot": "Spring Boot", "springboot": "Spring Boot",
@@ -41,46 +41,56 @@ TECH_ALIASES: dict[str, str] = {
     "django": "Django",
     "fastapi": "FastAPI",
     "flask": "Flask",
-    
-    # 데이터베이스
+
+    # DB
     "mysql": "MySQL",
     "mariadb": "MariaDB",
-    "postgresql": "PostgreSQL", "postgres": "PostgreSQL",
-    "mongodb": "MongoDB", "mongo": "MongoDB",
+    "postgresql": "PostgreSQL",
+    "postgres": "PostgreSQL",
+    "mongodb": "MongoDB",
+    "mongo": "MongoDB",
     "redis": "Redis",
-    
-    # 인프라 / DevOps
+
+    # 인프라
     "docker": "Docker",
-    "kubernetes": "Kubernetes", "k8s": "Kubernetes",
+    "kubernetes": "Kubernetes",
+    "k8s": "Kubernetes",
     "aws": "AWS",
     "gcp": "GCP",
     "azure": "Azure",
     "git": "Git",
-    
-    # 기타 기술 및 언어
+
+    # 기타
     "graphql": "GraphQL",
-    "rest api": "REST API", "restapi": "REST API",
+    "rest api": "REST API",
+    "restapi": "REST API",
     "flutter": "Flutter",
     "react native": "React Native",
-    "tailwind": "Tailwind CSS", "tailwindcss": "Tailwind CSS",
+    "tailwind": "Tailwind CSS",
+    "tailwindcss": "Tailwind CSS",
     "android": "Android",
     "ios": "iOS",
-    "go": "Go", "golang": "Go",
+    "go": "Go",
+    "golang": "Go",
     "rust": "Rust",
-    "c++": "C++", "cpp": "C++",
+    "c++": "C++",
+    "cpp": "C++",
     "c#": "C#",
     "ruby": "Ruby",
-    "rails": "Ruby on Rails", "ruby on rails": "Ruby on Rails",
-    "elasticsearch": "Elasticsearch", "elastic": "Elasticsearch",
+    "rails": "Ruby on Rails",
+    "ruby on rails": "Ruby on Rails",
+    "elasticsearch": "Elasticsearch",
+    "elastic": "Elasticsearch",
     "kafka": "Kafka",
     "jenkins": "Jenkins",
     "terraform": "Terraform",
 }
 
+
 JOB_TYPE_KEYWORDS = {
     "신입": ["신입"],
     "경력": ["경력"],
-    "신입/경력":["신입/경력"],
+    "신입/경력": ["신입/경력"],
     "무관": ["무관", "신입/경력", "경력/신입"],
 }
 
@@ -90,14 +100,14 @@ def normalize_tech(raw: str) -> str:
 
 
 def extract_techs_from_text(text: str) -> list[str]:
-    """텍스트에서 기술스택 키워드를 추출해 정규화된 목록으로 반환."""
     found = set()
     lower = text.lower()
-    # 글자 수가 긴 키워드부터 매칭하여 겹침 방지 (ex: spring boot가 spring보다 먼저 매칭되도록)
+
     for alias in sorted(TECH_ALIASES.keys(), key=len, reverse=True):
         pattern = r"(?<![a-zA-Z0-9])" + re.escape(alias) + r"(?![a-zA-Z0-9])"
         if re.search(pattern, lower):
             found.add(TECH_ALIASES[alias])
+
     return sorted(found)
 
 
@@ -109,16 +119,53 @@ def detect_job_type(text: str) -> str:
     return ""
 
 
-# ── 공통 데이터 클래스 ─────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
+# Position
+# ────────────────────────────────────────────────────────────────
+
+@dataclass
+class PositionInfo:
+    position_name: Optional[str] = None
+
+    tasks: list[str] = field(default_factory=list)
+
+    requirements: list[str] = field(default_factory=list)
+
+    preferred: list[str] = field(default_factory=list)
+
+    tech_stack: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "position_name": self.position_name,
+            "tasks": self.tasks,
+            "requirements": self.requirements,
+            "preferred": self.preferred,
+            "tech_stack": self.tech_stack,
+        }
+
+
+# ────────────────────────────────────────────────────────────────
+# JobInfo
+# ────────────────────────────────────────────────────────────────
+
 @dataclass
 class JobInfo:
     url: str
+
     title: str = ""
+
     company: str = ""
+
     job_type: str = ""
-    tasks: list[str] = field(default_factory=list)
+
+    positions: list[PositionInfo] = field(default_factory=list)
+
+    # 전체 공고 기준 기술스택 (매칭용)
     tech_stack: list[str] = field(default_factory=list)
+
     raw_text: str = ""
+
     error: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -127,7 +174,7 @@ class JobInfo:
             "title": self.title,
             "company": self.company,
             "job_type": self.job_type,
-            "tasks": self.tasks,
+            "positions": [p.to_dict() for p in self.positions],
             "tech_stack": self.tech_stack,
             "error": self.error,
         }

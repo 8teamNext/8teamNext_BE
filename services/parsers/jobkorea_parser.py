@@ -6,6 +6,7 @@ from typing import Optional
 
 from .base import (
     JobInfo,
+    PositionInfo,
     extract_techs_from_text,
     detect_job_type,
 )
@@ -131,55 +132,226 @@ def _parse_html(html: str, url: str) -> JobInfo:
         info.job_type = detect_job_type(info.raw_text)
 
     # 채용상세 parsing
-
+#여기부터
+    # tasks_raw = []
+    # skills_raw = []
     tasks_raw = []
+    requirements_raw = []
+    preferred_raw = []
+
+    # 기술스택 추출용 원문
     skills_raw = []
 
-    # 1) dl 구조
     dl_sections = soup.select("dl")
+
     for dl in dl_sections:
         dt = dl.select_one("dt")
         dd = dl.select_one("dd")
+
         if not dt or not dd:
             continue
 
         heading = dt.get_text(strip=True)
-        lines = [x.strip() for x in dd.get_text("\n").splitlines() if x.strip()]
 
+        lines = [
+            x.strip()
+            for x in dd.get_text("\n").splitlines()
+            if x.strip()
+        ]
+
+        heading_lower = heading.lower()
+
+        # 담당업무
         if any(k in heading for k in _TASK_KEYWORDS):
-            tasks_raw = lines
-        elif any(k.lower() in heading.lower() for k in _SKILL_KEYWORDS):
+            tasks_raw.extend(lines)
+
+        # 자격요건
+        elif any(
+            k in heading
+            for k in [
+                "자격요건",
+                "필수사항",
+                "지원자격",
+                "필요역량",
+            ]
+        ):
+            requirements_raw.extend(lines)
             skills_raw.extend(lines)
 
-    # 2) recruitment-item 구조
-    if not tasks_raw and not skills_raw:
+        elif any(
+            k in heading
+            for k in [
+                "우대사항",
+                "우대조건",
+                "가산점",
+            ]
+        ):
+            preferred_raw.extend(lines)
+            skills_raw.extend(lines)
+
+        # 기술스택
+        elif any(k in heading_lower for k in _SKILL_KEYWORDS):
+            skills_raw.extend(lines)
+
+    if (
+    not tasks_raw
+    and not requirements_raw
+    and not preferred_raw
+):
         recruitment_items = soup.select(".recruitment-item")
 
-        for item in recruitment_items:
-            text = item.get_text("\n", strip=True)
+    for item in recruitment_items:
+        text = item.get_text("\n", strip=True)
 
-            if any(k in text for k in _TASK_KEYWORDS):
-                tasks_raw.extend(text.splitlines())
+        lines = [
+            x.strip()
+            for x in text.splitlines()
+            if x.strip()
+        ]
 
-            if any(k in text for k in _SKILL_KEYWORDS):
-                skills_raw.extend(text.splitlines())
+        joined = " ".join(lines)
 
-    info.tasks = tasks_raw
+        if any(k in joined for k in _TASK_KEYWORDS):
+            tasks_raw.extend(lines)
+
+        if any(
+            k in joined
+            for k in [
+                "자격요건",
+                "필수사항",
+                "지원자격",
+                "필요역량",
+            ]
+        ):
+            requirements_raw.extend(lines)
+            skills_raw.extend(lines)
+
+        if any(
+            k in joined
+            for k in [
+                "우대사항",
+                "우대조건",
+            ]
+        ):
+            preferred_raw.extend(lines)
+            skills_raw.extend(lines)
 
 
-    # tech stack
+# ------------------------------------------------
+# 기술스택 원문 생성
+# ------------------------------------------------
 
-    tech_source = " ".join(skills_raw)
+    tech_source_parts = []
+
+    tech_source_parts.extend(skills_raw)
+    tech_source_parts.extend(requirements_raw)
+    tech_source_parts.extend(preferred_raw)
 
     if ocr_text:
-        tech_source += "\n" + ocr_text
+        tech_source_parts.append(ocr_text)
 
-    if not tech_source.strip():
-        tech_source = info.raw_text
+    if not tech_source_parts:
+        tech_source_parts.append(info.raw_text)
 
-    info.tech_stack = extract_techs_from_text(tech_source)
+    tech_source_text = "\n".join(tech_source_parts)
+
+
+    # ------------------------------------------------
+    # Position 생성
+    # ------------------------------------------------
+
+    position = PositionInfo(
+        position_name=None,
+        tasks=tasks_raw,
+        requirements=requirements_raw,
+        preferred=preferred_raw,
+        tech_stack=extract_techs_from_text(
+            tech_source_text
+        ),
+    )
+
+    info.positions = [position]
+
+
+    # ------------------------------------------------
+    # 전체 공고 기술스택
+    # ------------------------------------------------
+
+    info.tech_stack = sorted(
+        {
+            skill
+            for pos in info.positions
+            for skill in pos.tech_stack
+        }
+    )
 
     return info
+        
+    # # 1) dl 구조
+    # dl_sections = soup.select("dl")
+    # for dl in dl_sections:
+    #     dt = dl.select_one("dt")
+    #     dd = dl.select_one("dd")
+    #     if not dt or not dd:
+    #         continue
+
+    #     heading = dt.get_text(strip=True)
+    #     lines = [x.strip() for x in dd.get_text("\n").splitlines() if x.strip()]
+
+    #     if any(k in heading for k in _TASK_KEYWORDS):
+    #         tasks_raw = lines
+    #     elif any(k.lower() in heading.lower() for k in _SKILL_KEYWORDS):
+    #         skills_raw.extend(lines)
+
+    # # 2) recruitment-item 구조
+    # if not tasks_raw and not skills_raw:
+    #     recruitment_items = soup.select(".recruitment-item")
+
+    #     for item in recruitment_items:
+    #         text = item.get_text("\n", strip=True)
+
+    #         if any(k in text for k in _TASK_KEYWORDS):
+    #             tasks_raw.extend(text.splitlines())
+
+    #         if any(k in text for k in _SKILL_KEYWORDS):
+    #             skills_raw.extend(text.splitlines())
+
+    # info.tasks = tasks_raw
+
+
+    # # tech stack
+
+    # tech_source = " ".join(skills_raw)
+
+    # if ocr_text:
+    #     tech_source += "\n" + ocr_text
+
+    # if not tech_source.strip():
+    #     tech_source = info.raw_text
+
+    # info.tech_stack = extract_techs_from_text(tech_source)
+
+    # return info
+#여기까지..
+
+# ------------------------------------------------
+# 채용상세 parsing
+# ------------------------------------------------
+
+
+
+# 1) dl 구조
+
+
+    # 우대사항
+   
+
+
+# ------------------------------------------------
+# recruitment-item fallback
+# ------------------------------------------------
+
+
 
 
 
