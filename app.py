@@ -156,6 +156,7 @@ async def api_analyze():
                     "company": d.get("company", ""),
                     "job_type": d.get("job_type", ""),
                     "tech_stack": d.get("tech_stack", []),
+                    "positions": d.get("positions", []),
                 })
         return crawl_results
  

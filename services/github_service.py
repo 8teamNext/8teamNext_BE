@@ -22,6 +22,7 @@ HEADERS = {
 
 # package.json에서 추출할 주요 프레임워크/라이브러리 키워드
 PACKAGE_KEYWORDS = {
+    "ai":"ai",
     "react": "React",
     "react-dom": "React",
     "next": "Next.js",
