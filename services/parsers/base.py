@@ -89,6 +89,7 @@ class JobInfo:
     company: str = ""
     job_type: str = ""
     tasks: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
     tech_stack: list[str] = field(default_factory=list)
     raw_text: str = ""
     error: Optional[str] = None

@@ -1,9 +1,24 @@
 import uuid
+import re
+import asyncio
 from datetime import datetime
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
-from services.crawler import crawler_bp 
+from services.crawler import crawler_bp
+from services.parsers.jobkorea_parser_v2 import parse_jobkorea
+
+def _crawl_jobkorea(url: str):
+    """동기 컨텍스트에서 Playwright 비동기 크롤러 실행."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(parse_jobkorea(url))
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
+_JOBKOREA_URL_RE = re.compile(r'^https?://(?:www\.)?jobkorea\.co\.kr/', re.IGNORECASE)
 
 
 
@@ -87,6 +102,24 @@ def read_root():
 
 CORS(app, resources={r"/*": {"origins": "*"}})
 app.register_blueprint(crawler_bp)
+
+@app.route("/api/debug/crawl", methods=["GET"])
+def api_debug_crawl():
+    url = request.args.get("url", "")
+    if not url:
+        return jsonify({"detail": "url 쿼리 파라미터가 필요합니다."}), 400
+    info = _crawl_jobkorea(url)
+    return jsonify({
+        "error": info.error,
+        "title": info.title,
+        "company": info.company,
+        "job_type": info.job_type,
+        "tasks": info.tasks,
+        "skills": info.skills,
+        "tech_stack": info.tech_stack,
+        "raw_text_length": len(info.raw_text),
+        "raw_text_preview": info.raw_text[:5000],
+    })
 
 @app.route("/api/analyze/github", methods=["POST"])
 def api_analyze_github():
@@ -191,7 +224,26 @@ def api_analyze_interview_questions():
         payload = InterviewGenRequest.model_validate(data)
         cover_letter = payload.cover_letter if payload.cover_letter else db_profile.default_cover_letter
         job_posting = payload.job_posting or ""
+
+        job_text = job_posting.strip()
+        crawled_skills: list = []
+        if job_text and _JOBKOREA_URL_RE.match(job_text):
+            # 잡코리아 URL: 크롤링 후 raw_text를 LLM에 전달
+            info = _crawl_jobkorea(job_text)
+            if info.error:
+                return jsonify({"detail": f"잡코리아 채용공고를 불러오지 못했습니다: {info.error}"}), 400
+            crawled_skills = info.skills
+            header = "\n".join(filter(None, [
+                f"직무: {info.title}" if info.title else "",
+                f"회사: {info.company}" if info.company else "",
+                f"스킬: {', '.join(info.skills)}" if info.skills else "",
+                f"요구 기술스택: {', '.join(info.tech_stack)}" if info.tech_stack else "",
+            ]))
+            job_posting = (header + "\n\n" + info.raw_text[:3000]).strip()
+
         response = generate_interview_questions(cover_letter, job_posting)
+        if crawled_skills and response.job_posting_analysis:
+            response.job_posting_analysis.skills = crawled_skills
 
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",

@@ -93,8 +93,16 @@ class InterviewQuestion(BaseModel):
     sample_answer_tip: str
     sample_answer: str
 
+class JobPostingAnalysis(BaseModel):
+    summary: str = ""                  # 회사·직무·공고 한 줄 요약
+    skills: List[str] = []             # 잡코리아 스킬 섹션에서 직접 추출한 태그
+    extracted_requirements: List[str]  # 채용공고에서 추출한 핵심 요구사항
+    matched: List[str]                 # 자소서와 일치하는 역량
+    unmatched: List[str]               # 자소서에 없는 역량 (갭)
+
 class InterviewGenResponse(BaseModel):
     questions: List[InterviewQuestion]
+    job_posting_analysis: Optional[JobPostingAnalysis] = None
 
 # 5. Cover Letter Comparison Models
 class CoverLetterCompareRequest(BaseModel):
