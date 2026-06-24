@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS analysis_github (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ────────────────────────────────────────────
--- 비교분석 2: 스킬 갭 분석
+-- 비교분석 2: 채용공고- github 분석
 -- models.py GapAnalysisResponse 기반
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS analysis_gap (
