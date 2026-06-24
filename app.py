@@ -44,6 +44,7 @@ from services.resume_analysis import analyze_resume_github, extract_pdf_text, va
 from services.interview_gen_openai import generate_interview_questions
 from services.cover_letter_cmp import compare_cover_letters
 from services.leancageAnalysisTest import leancage_test_bp
+from services.chatbot import chatbot_bp
 from db import fetch_one, execute
 from crypto import encrypt_text, decrypt_text
 
@@ -107,6 +108,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 app.register_blueprint(crawler_bp)
 
 app.register_blueprint(leancage_test_bp)
+app.register_blueprint(chatbot_bp)
 
 @app.route("/api/debug/crawl", methods=["GET"])
 def api_debug_crawl():
@@ -723,6 +725,27 @@ async def ensure_db():
             _db_initialized = True
         except Exception as e:
             print(f"[DB] user_profile 테이블 초기화 실패: {e}")
+
+def _init_rag() -> None:
+    """서버 시작 시 RAG 문서 인덱싱 (별도 스레드에서 실행)."""
+    import threading
+
+    def _run():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            from services.rag_service import index_documents
+            result = loop.run_until_complete(index_documents())
+            print(f"[RAG] 인덱싱 완료: {result}")
+        except Exception as e:
+            print(f"[RAG] 인덱싱 오류: {e}")
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+_init_rag()
 
 if __name__ == '__main__':
     app.run(port=8000, debug=True)
