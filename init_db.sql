@@ -14,14 +14,21 @@ USE `next`;
 -- 회원
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-  user_id       BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  email         VARCHAR(255)    UNIQUE,
-  password_hash VARCHAR(255)   ,
-  name          VARCHAR(100)   ,
-  github_id     VARCHAR(100),
-  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  user_id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email                VARCHAR(255) UNIQUE,
+  password_hash        VARCHAR(255),
+  name                 VARCHAR(100),
+  github_id            VARCHAR(100),
+  default_resume       LONGTEXT,
+  default_cover_letter LONGTEXT,
+  created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 기존 users 테이블에 컬럼이 없으면 추가 (멱등성)
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS default_resume       LONGTEXT,
+  ADD COLUMN IF NOT EXISTS default_cover_letter LONGTEXT;
 
 -- ────────────────────────────────────────────
 -- 이력서

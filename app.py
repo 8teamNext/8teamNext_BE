@@ -44,16 +44,63 @@ from services.resume_analysis import analyze_resume_github, extract_pdf_text, va
 from services.interview_gen_openai import generate_interview_questions
 from services.cover_letter_cmp import compare_cover_letters
 from services.leancageAnalysisTest import leancage_test_bp
+from services.chatbot import chatbot_bp
+from db import fetch_one, execute
+from crypto import encrypt_text, decrypt_text
 
 app = Flask(__name__)
 
 # Configure CORS
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# In-memory session store (빈 상태로 시작 — 사용자가 마이페이지에서 직접 입력)
-db_profile = UserProfile()
-
+# In-memory history (프로필은 DB로 전환)
 db_history: List[AnalysisHistoryItem] = []
+
+# 단일 사용자 ID (인증 시스템 없음)
+_USER_ID = 1
+
+async def _init_profile_table():
+    # users 테이블에 프로필 컬럼이 없으면 추가 (이미 있으면 1060 에러 무시)
+    for col_sql in [
+        "ALTER TABLE users ADD COLUMN default_resume LONGTEXT",
+        "ALTER TABLE users ADD COLUMN default_cover_letter LONGTEXT",
+    ]:
+        try:
+            await execute(col_sql)
+        except Exception as e:
+            if "Duplicate column name" not in str(e):
+                raise
+
+async def _get_profile_from_db() -> UserProfile:
+    row = await fetch_one(
+        "SELECT name, github_id, default_resume, default_cover_letter FROM users WHERE user_id = %s",
+        (_USER_ID,)
+    )
+    if not row:
+        return UserProfile()
+    return UserProfile(
+        name=row.get("name") or "",
+        github_username=row.get("github_id") or "",
+        default_resume=decrypt_text(row.get("default_resume") or ""),
+        default_cover_letter=decrypt_text(row.get("default_cover_letter") or ""),
+    )
+
+async def _save_profile_to_db(profile: UserProfile):
+    await execute("""
+        INSERT INTO users (user_id, name, github_id, default_resume, default_cover_letter)
+        VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            name                 = VALUES(name),
+            github_id            = VALUES(github_id),
+            default_resume       = VALUES(default_resume),
+            default_cover_letter = VALUES(default_cover_letter)
+    """, (
+        _USER_ID,
+        profile.name,
+        profile.github_username or "",
+        encrypt_text(profile.default_resume or ""),
+        encrypt_text(profile.default_cover_letter or ""),
+    ))
 
 # --- Endpoints ---
 
@@ -68,6 +115,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 app.register_blueprint(crawler_bp)
 
 app.register_blueprint(leancage_test_bp)
+app.register_blueprint(chatbot_bp)
 
 @app.route("/api/debug/crawl", methods=["GET"])
 def api_debug_crawl():
@@ -252,7 +300,8 @@ async def api_analyze_gap():
         payload = GapAnalysisRequest.model_validate(data)
 
         # If resume_text is empty, fallback to the saved profile resume
-        resume = payload.resume_text if payload.resume_text else db_profile.default_resume
+        _profile = await _get_profile_from_db()
+        resume = payload.resume_text if payload.resume_text else _profile.default_resume
 
         response = await analyze_gap(payload.repo_urls, resume, payload.job_urls)
         
@@ -274,7 +323,8 @@ async def api_analyze_resume_github():
     try:
         data = request.get_json()
         payload = ResumeGithubRequest.model_validate(data)
-        resume = payload.resume_text if payload.resume_text else db_profile.default_resume
+        _profile = await _get_profile_from_db()
+        resume = payload.resume_text if payload.resume_text else _profile.default_resume
         response = await analyze_resume_github(
             resume,
             payload.github_username,
@@ -322,11 +372,12 @@ async def api_parse_resume():
 
 
 @app.route("/api/analyze/interview-questions", methods=["POST"])
-def api_analyze_interview_questions():
+async def api_analyze_interview_questions():
     try:
         data = request.get_json()
         payload = InterviewGenRequest.model_validate(data)
-        cover_letter = payload.cover_letter if payload.cover_letter else db_profile.default_cover_letter
+        _profile = await _get_profile_from_db()
+        cover_letter = payload.cover_letter if payload.cover_letter else _profile.default_cover_letter
         job_posting = payload.job_posting or ""
 
         job_text = job_posting.strip()
@@ -621,21 +672,40 @@ async def api_analyze_unified():
     except Exception as e:
         return jsonify({"detail": f"Unified career analysis failed: {str(e)}"}), 500
 
+# --- 암호화 미리보기 엔드포인트 ---
+
+@app.route("/api/encrypt-text", methods=["POST"])
+def api_encrypt_text():
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        text = data.get("text", "")
+        if not text:
+            return jsonify({"encrypted": ""})
+        encrypted = encrypt_text(text)
+        return jsonify({"encrypted": encrypted})
+    except Exception as e:
+        return jsonify({"detail": f"암호화 실패: {str(e)}"}), 500
+
 # --- Profile and History Session endpoints ---
 
 @app.route("/api/profile", methods=["GET"])
 async def get_profile():
-    return jsonify(db_profile.model_dump())
+    try:
+        profile = await _get_profile_from_db()
+    except Exception as e:
+        print(f"[profile GET] DB 조회 실패, 빈 프로필 반환: {e}")
+        profile = UserProfile()
+    return jsonify(profile.model_dump())
 
 @app.route("/api/profile", methods=["POST"])
 async def update_profile():
-    global db_profile
     try:
         data = request.get_json(force=True, silent=True)
         if data is None:
             return jsonify({"detail": "Invalid or missing JSON body"}), 400
-        db_profile = UserProfile.model_validate(data)
-        return jsonify(db_profile.model_dump())
+        profile = UserProfile.model_validate(data)
+        await _save_profile_to_db(profile)
+        return jsonify(profile.model_dump())
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -650,6 +720,39 @@ async def delete_history_item(id):
     global db_history
     db_history = [item for item in db_history if item.id != id]
     return jsonify({"status": "success", "message": "History item deleted"})
+
+_db_initialized = False
+
+@app.before_request
+async def ensure_db():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            await _init_profile_table()
+            _db_initialized = True
+        except Exception as e:
+            print(f"[DB] user_profile 테이블 초기화 실패: {e}")
+
+def _init_rag() -> None:
+    """서버 시작 시 RAG 문서 인덱싱 (별도 스레드에서 실행)."""
+    import threading
+
+    def _run():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            from services.rag_service import index_documents
+            result = loop.run_until_complete(index_documents())
+            print(f"[RAG] 인덱싱 완료: {result}")
+        except Exception as e:
+            print(f"[RAG] 인덱싱 오류: {e}")
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+_init_rag()
 
 if __name__ == '__main__':
     app.run(port=8000, debug=True)

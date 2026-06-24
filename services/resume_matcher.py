@@ -1,6 +1,6 @@
 from typing import List, Set
 from models import ResumeGithubResponse
-from services.text_utils import parse_skills_from_text
+from services.text_utils import parse_skills_from_text, normalize_skill
 
 
 async def match_resume_github(
@@ -30,10 +30,20 @@ async def match_resume_github(
 
     github_skills_set: Set[str] = set(github_skills)
 
-    # 2. 이력서 기술 vs GitHub 실제 기술 교차 비교
-    verified_skills = sorted(resume_skills & github_skills_set)
-    unverified_skills = sorted(resume_skills - github_skills_set)
-    newly_discovered_skills = sorted(github_skills_set - resume_skills)
+    # 2. 정규화된 이름으로 비교 (HTML == HTML/CSS 등 alias 처리)
+    norm_github: Set[str] = {normalize_skill(s) for s in github_skills_set}
+
+    verified_skills = []
+    unverified_skills = []
+    for skill in sorted(resume_skills):
+        if normalize_skill(skill) in norm_github:
+            verified_skills.append(skill)
+        else:
+            unverified_skills.append(skill)
+
+    # GitHub에만 있는 기술: 정규화 기준으로 이력서에 없는 것
+    norm_resume: Set[str] = {normalize_skill(s) for s in resume_skills}
+    newly_discovered_skills = sorted(s for s in github_skills_set if normalize_skill(s) not in norm_resume)
 
     total_resume = len(resume_skills)
     verified_count = len(verified_skills)
