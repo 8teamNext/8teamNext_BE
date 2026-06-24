@@ -109,6 +109,8 @@ class ResumeGithubResponse(BaseModel):
 class InterviewGenRequest(BaseModel):
     cover_letter: str
     job_posting: Optional[str] = ""
+    style: Optional[str] = "기본형"        # 기본형 | 압박형 | 균형형
+    difficulty: Optional[str] = "신입"    # 신입 | 경력
 
 class InterviewQuestion(BaseModel):
     id: int
@@ -117,7 +119,15 @@ class InterviewQuestion(BaseModel):
     intent: str  # why the interviewer asks this
     suggested_keywords: List[str]
     sample_answer_tip: str
-    sample_answer: str
+    sample_answer: str = ""  # lazy-loaded on demand
+
+class SampleAnswerRequest(BaseModel):
+    question: str
+    cover_letter: str
+    intent: str
+    suggested_keywords: List[str]
+    style: Optional[str] = "기본형"
+    difficulty: Optional[str] = "신입"
 
 class JobPostingAnalysis(BaseModel):
     summary: str = ""                  # 회사·직무·공고 한 줄 요약
@@ -129,6 +139,14 @@ class JobPostingAnalysis(BaseModel):
 class InterviewGenResponse(BaseModel):
     questions: List[InterviewQuestion]
     job_posting_analysis: Optional[JobPostingAnalysis] = None
+
+class FollowupRequest(BaseModel):
+    question: str
+    user_answer: str
+
+class FollowupResponse(BaseModel):
+    followup_question: str
+    intent: str
 
 # 5. Cover Letter Comparison Models
 class CoverLetterCompareRequest(BaseModel):
