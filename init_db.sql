@@ -15,9 +15,9 @@ USE `next`;
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   user_id       BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  email         VARCHAR(255)  NOT NULL UNIQUE,
-  password_hash VARCHAR(255)  NOT NULL,
-  name          VARCHAR(100)  NOT NULL,
+  email         VARCHAR(255)    UNIQUE,
+  password_hash VARCHAR(255)   ,
+  name          VARCHAR(100)   ,
   github_id     VARCHAR(100),
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS users (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS resumes (
   resume_id   BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id     BIGINT UNSIGNED NOT NULL,
+  user_id     BIGINT UNSIGNED  ,
   title       VARCHAR(255),
-  content     MEDIUMTEXT NOT NULL,
+  content     MEDIUMTEXT  ,
   is_active   BOOLEAN DEFAULT TRUE,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS resumes (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS cover_letters (
   cover_letter_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id         BIGINT UNSIGNED NOT NULL,
+  user_id         BIGINT UNSIGNED  ,
   title           VARCHAR(255),
-  content         MEDIUMTEXT NOT NULL,
+  content         MEDIUMTEXT  ,
   is_active       BOOLEAN DEFAULT TRUE,
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS cover_letters (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS job_url_groups (
   group_id    BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id     BIGINT UNSIGNED NOT NULL,
-  group_name  VARCHAR(100) NOT NULL,
+  user_id     BIGINT UNSIGNED  ,
+  group_name  VARCHAR(100)  ,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_job_url_groups_user
@@ -69,9 +69,9 @@ CREATE TABLE IF NOT EXISTS job_url_groups (
 -- 채용공고 URL (그룹당 최대 5개, 앱 레벨에서 제한)
 CREATE TABLE IF NOT EXISTS job_urls (
   url_id      BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  group_id    BIGINT UNSIGNED NOT NULL,
-  url         VARCHAR(2048) NOT NULL,
-  slot_order  TINYINT UNSIGNED NOT NULL,       -- 1~5 슬롯
+  group_id    BIGINT UNSIGNED  ,
+  url         VARCHAR(2048)  ,
+  slot_order  TINYINT UNSIGNED  ,       -- 1~5 슬롯
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_group_slot (group_id, slot_order),
   CONSTRAINT fk_job_urls_group
@@ -84,9 +84,9 @@ CREATE TABLE IF NOT EXISTS job_urls (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS analysis_github (
   analysis_github_id  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id             BIGINT UNSIGNED NOT NULL,
-  repo_urls           JSON NOT NULL,           -- List[str] 입력 스냅샷
-  job_urls            JSON NOT NULL,           -- List[str] 입력 스냅샷
+  user_id             BIGINT UNSIGNED  ,
+  repo_urls           JSON  ,           -- List[str] 입력 스냅샷
+  job_urls            JSON  ,           -- List[str] 입력 스냅샷
   portfolio_rating    VARCHAR(50),
   overall_job_fit     TINYINT UNSIGNED,        -- 0~100
   strong_skills       JSON,                    -- List[str]
@@ -108,9 +108,9 @@ CREATE TABLE IF NOT EXISTS analysis_github (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS analysis_gap (
   analysis_gap_id      BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id              BIGINT UNSIGNED NOT NULL,
+  user_id              BIGINT UNSIGNED  ,
   repo_urls            JSON,                   -- List[str] optional
-  job_urls             JSON NOT NULL,          -- List[str]
+  job_urls             JSON  ,          -- List[str]
   proven_skills        JSON,                   -- List[str]
   missing_skills       JSON,                   -- List[str]
   discovered_skills    JSON,                   -- List[str]
@@ -129,9 +129,9 @@ CREATE TABLE IF NOT EXISTS analysis_gap (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS analysis_resume_github (
   analysis_rg_id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id                 BIGINT UNSIGNED NOT NULL,
-  github_username         VARCHAR(100) NOT NULL,
-  tech_stack              JSON NOT NULL,       -- List[str]
+  user_id                 BIGINT UNSIGNED  ,
+  github_username         VARCHAR(100)  ,
+  tech_stack              JSON  ,       -- List[str]
   overall_evaluation      TEXT,
   resume_skills           JSON,                -- List[str]
   github_skills           JSON,                -- List[str]
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS analysis_resume_github (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS integrated_analyses (
   integrated_id        BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id              BIGINT UNSIGNED NOT NULL,
+  user_id              BIGINT UNSIGNED  ,
   github_url           VARCHAR(2048),          -- 입력 스냅샷
   job_urls             JSON,                   -- List[str] 입력 스냅샷
   portfolio_rating     VARCHAR(50),
@@ -180,9 +180,9 @@ CREATE TABLE IF NOT EXISTS integrated_analyses (
 -- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS integrated_analysis_map (
   map_id        BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  integrated_id BIGINT UNSIGNED NOT NULL,
-  analysis_type ENUM('github','gap','resume_github') NOT NULL,
-  analysis_id   BIGINT UNSIGNED NOT NULL,
+  integrated_id BIGINT UNSIGNED  ,
+  analysis_type ENUM('github','gap','resume_github')  ,
+  analysis_id   BIGINT UNSIGNED  ,
   slot_order    TINYINT UNSIGNED,
   UNIQUE KEY uq_map_pair (integrated_id, analysis_type, analysis_id),
   CONSTRAINT fk_map_integrated
