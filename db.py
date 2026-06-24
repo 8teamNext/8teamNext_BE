@@ -7,82 +7,76 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 # ────────────────────────────────────────────
-# 커넥션 풀 싱글톤
+# 커넥션 헬퍼 (요청마다 새 커넥션 — 풀 없음, 이벤트 루프 충돌 없음)
 # ────────────────────────────────────────────
-_pool: Optional[aiomysql.Pool] = None
-
-
-async def get_pool() -> aiomysql.Pool:
-    global _pool
-    if _pool is None:
-        _pool = await aiomysql.create_pool(
-            host=os.getenv("DB_HOST", "localhost"),
-            port=int(os.getenv("DB_PORT", 3306)),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""),
-            db=os.getenv("DB_NAME", "next"),
-            charset="utf8mb4",
-            autocommit=False,
-            minsize=2,
-            maxsize=10,
-        )
-    return _pool
-
-
-async def close_pool() -> None:
-    global _pool
-    if _pool:
-        _pool.close()
-        await _pool.wait_closed()
-        _pool = None
+async def _get_conn() -> aiomysql.Connection:
+    return await aiomysql.connect(
+        host=os.getenv("DB_HOST", "localhost"),
+        port=int(os.getenv("DB_PORT", 3306)),
+        user=os.getenv("DB_USER", "root"),
+        password=os.getenv("DB_PASSWORD", ""),
+        db=os.getenv("DB_NAME", "next"),
+        charset="utf8mb4",
+        cursorclass=aiomysql.DictCursor,
+        autocommit=False,
+    )
 
 
 # ────────────────────────────────────────────
-# 단일 쿼리 실행 헬퍼
+# 단일 쿼리 실행 헬퍼 (비동기)
 # ────────────────────────────────────────────
 async def fetch_all(sql: str, args: tuple = ()) -> list[dict]:
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor(aiomysql.DictCursor) as cur:
+    conn = await _get_conn()
+    try:
+        async with conn.cursor() as cur:
             await cur.execute(sql, args)
             return await cur.fetchall()
+    finally:
+        conn.close()
 
 
 async def fetch_one(sql: str, args: tuple = ()) -> Optional[dict]:
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor(aiomysql.DictCursor) as cur:
+    conn = await _get_conn()
+    try:
+        async with conn.cursor() as cur:
             await cur.execute(sql, args)
             return await cur.fetchone()
+    finally:
+        conn.close()
 
 
 async def execute(sql: str, args: tuple = ()) -> int:
     """INSERT/UPDATE/DELETE. INSERT는 lastrowid 반환."""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
+    conn = await _get_conn()
+    try:
         async with conn.cursor() as cur:
             await cur.execute(sql, args)
             await conn.commit()
             return cur.lastrowid
+    except Exception:
+        await conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 # ────────────────────────────────────────────
 # 트랜잭션 컨텍스트 매니저
-# 여러 쿼리를 묶을 때 사용: async with transaction() as cur:
 # ────────────────────────────────────────────
 @asynccontextmanager
 async def transaction():
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            try:
-                await conn.begin()
-                yield cur
-                await conn.commit()
-            except Exception:
-                await conn.rollback()
-                raise
+    conn = await _get_conn()
+    try:
+        async with conn.cursor() as cur:
+            yield cur
+            await conn.commit()
+    except Exception:
+        await conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 # ────────────────────────────────────────────
