@@ -7,7 +7,7 @@ import re
 import urllib.request
 from typing import List, Set, Optional
 from models import ResumeGithubResponse, ResumeGithubResult, ResumeGithubRaw, MetricItem
-from services.text_utils import parse_skills_from_text
+from services.text_utils import parse_skills_from_text, normalize_skill
 from services.llm_analyzer import generate_resume_github_advice, generate_overall_evaluation
 
 
@@ -292,10 +292,13 @@ async def analyze_resume_github(
     if not github_skills:
         github_skills = {"Java", "Spring Boot", "MySQL", "Git"}
 
-    # 3. 교차 분석
-    verified_skills = sorted(resume_skills & github_skills)
-    unverified_skills = sorted(resume_skills - github_skills)
-    newly_discovered_skills = sorted(github_skills - resume_skills)
+    # 3. 교차 분석 (alias 정규화 적용: HTML == HTML/CSS 등)
+    norm_github = {normalize_skill(s) for s in github_skills}
+    norm_resume = {normalize_skill(s) for s in resume_skills}
+
+    verified_skills = sorted(s for s in resume_skills if normalize_skill(s) in norm_github)
+    unverified_skills = sorted(s for s in resume_skills if normalize_skill(s) not in norm_github)
+    newly_discovered_skills = sorted(s for s in github_skills if normalize_skill(s) not in norm_resume)
 
     total_resume = len(resume_skills)
     verified_count = len(verified_skills)
