@@ -60,7 +60,7 @@ db_history: List[AnalysisHistoryItem] = []
 _USER_ID = 1
 
 async def _init_profile_table():
-    # users 테이블에 프로필 컬럼이 없으면 추가 (이미 있으면 1060 에러 무시)
+    # users 테이블에 프로필 컬럼이 없으면 추가 (이미 있으면 1060 무시)
     for col_sql in [
         "ALTER TABLE users ADD COLUMN default_resume LONGTEXT",
         "ALTER TABLE users ADD COLUMN default_cover_letter LONGTEXT",
@@ -68,7 +68,7 @@ async def _init_profile_table():
         try:
             await execute(col_sql)
         except Exception as e:
-            if "Duplicate column name" not in str(e):
+            if "1060" not in str(e) and "Duplicate column name" not in str(e):
                 raise
 
 async def _get_profile_from_db() -> UserProfile:
@@ -396,7 +396,12 @@ async def api_analyze_interview_questions():
             ]))
             job_posting = (header + "\n\n" + info.raw_text[:3000]).strip()
 
-        response = generate_interview_questions(cover_letter, job_posting)
+        response = generate_interview_questions(
+            cover_letter,
+            job_posting,
+            style=payload.style or "기본형",
+            difficulty=payload.difficulty or "신입",
+        )
         if crawled_skills and response.job_posting_analysis:
             response.job_posting_analysis.skills = crawled_skills
 
@@ -413,6 +418,39 @@ async def api_analyze_interview_questions():
         return jsonify({"detail": str(e)}), 400
     except Exception as e:
         return jsonify({"detail": f"Interview question generation failed: {str(e)}"}), 500
+
+@app.route("/api/analyze/sample-answer", methods=["POST"])
+def api_sample_answer():
+    try:
+        from models import SampleAnswerRequest
+        from services.interview_gen_openai import generate_sample_answer
+        data = request.get_json()
+        payload = SampleAnswerRequest.model_validate(data)
+        answer = generate_sample_answer(
+            payload.question,
+            payload.cover_letter,
+            payload.intent,
+            payload.suggested_keywords,
+            style=payload.style or "기본형",
+            difficulty=payload.difficulty or "신입",
+        )
+        return jsonify({"sample_answer": answer})
+    except Exception as e:
+        return jsonify({"detail": f"모범 답변 생성 실패: {str(e)}"}), 500
+
+@app.route("/api/analyze/followup-question", methods=["POST"])
+def api_followup_question():
+    try:
+        from models import FollowupRequest
+        from services.interview_gen_openai import generate_followup_question
+        data = request.get_json()
+        payload = FollowupRequest.model_validate(data)
+        if not payload.user_answer.strip():
+            return jsonify({"detail": "답변을 입력해주세요."}), 400
+        result = generate_followup_question(payload.question, payload.user_answer)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"detail": f"꼬리질문 생성 실패: {str(e)}"}), 500
 
 @app.route("/api/analyze/cover-letter-compare", methods=["POST"])
 async def api_analyze_cover_letter_compare():
