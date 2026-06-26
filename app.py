@@ -60,15 +60,15 @@ db_history: List[AnalysisHistoryItem] = []
 _USER_ID = 1
 
 async def _init_profile_table():
-    # users 테이블에 프로필 컬럼이 없으면 추가 (이미 있으면 1060 에러 무시)
+    # users 테이블에 프로필 컬럼이 없으면 추가 (이미 있으면 1060 무시)
     for col_sql in [
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS default_resume LONGTEXT",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS default_cover_letter LONGTEXT",
+        "ALTER TABLE users ADD COLUMN default_resume LONGTEXT",
+        "ALTER TABLE users ADD COLUMN default_cover_letter LONGTEXT",
     ]:
         try:
             await execute(col_sql)
         except Exception as e:
-            if "Duplicate column name" not in str(e):
+            if "1060" not in str(e) and "Duplicate column name" not in str(e):
                 raise
 
 async def _get_profile_from_db() -> UserProfile:
