@@ -384,7 +384,7 @@ async def api_analyze_interview_questions():
         crawled_skills: list = []
         if job_text and _JOBKOREA_URL_RE.match(job_text):
             # 잡코리아 URL: 크롤링 후 raw_text를 LLM에 전달
-            info = _crawl_jobkorea(job_text)
+            info = await parse_jobkorea(job_text)
             if info.error:
                 return jsonify({"detail": f"잡코리아 채용공고를 불러오지 못했습니다: {info.error}"}), 400
             crawled_skills = info.skills
