@@ -1,0 +1,48 @@
+tags:
+  - GitHub
+summary: GitHub 기술 스택 미리보기
+description: GitHub 사용자명으로 기술 스택을 빠르게 조회합니다.
+parameters:
+  - name: username
+    in: query
+    required: true
+    type: string
+    description: GitHub 사용자명
+    example: "kimcoding"
+responses:
+  200:
+    description: 조회 성공
+    schema:
+      type: object
+      properties:
+        username:
+          type: string
+        confirmed_skills:
+          type: array
+          items:
+            type: string
+          description: 실제 코드에서 확인된 기술
+        inferred_skills:
+          type: array
+          items:
+            type: string
+          description: 패키지/토픽에서 추론된 기술
+        raw_languages:
+          type: object
+          description: 언어별 사용 비율 (%)
+          additionalProperties:
+            type: number
+  400:
+    description: username 파라미터 누락
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+  404:
+    description: GitHub 사용자 없음
+    schema:
+      type: object
+      properties:
+        error:
+          type: string

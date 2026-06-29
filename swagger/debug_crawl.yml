@@ -1,0 +1,49 @@
+tags:
+  - Debug
+summary: 채용공고 크롤링 테스트
+description: 잡코리아 채용공고 URL을 입력하면 크롤링 결과를 반환합니다.
+parameters:
+  - name: url
+    in: query
+    required: true
+    type: string
+    description: 크롤링할 잡코리아 채용공고 URL
+    example: "https://www.jobkorea.co.kr/Recruit/GI_Read/12345678"
+responses:
+  200:
+    description: 크롤링 성공
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+          nullable: true
+        title:
+          type: string
+        company:
+          type: string
+        job_type:
+          type: string
+        tasks:
+          type: array
+          items:
+            type: string
+        skills:
+          type: array
+          items:
+            type: string
+        tech_stack:
+          type: array
+          items:
+            type: string
+        raw_text_length:
+          type: integer
+        raw_text_preview:
+          type: string
+  400:
+    description: url 파라미터 누락
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

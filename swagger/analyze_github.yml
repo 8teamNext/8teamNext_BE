@@ -1,0 +1,73 @@
+tags:
+  - GitHub
+summary: GitHub 레포지토리 분석
+description: GitHub 레포지토리 URL 목록과 채용공고 URL 목록을 받아 기술 역량을 분석합니다.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - repo_urls
+        - job_urls
+      properties:
+        repo_urls:
+          type: array
+          maxItems: 5
+          description: 분석할 GitHub 레포지토리 URL 목록
+          items:
+            type: string
+          example:
+            - "https://github.com/user/repo1"
+        job_urls:
+          type: array
+          maxItems: 5
+          description: 비교할 채용공고 URL 목록
+          items:
+            type: string
+          example:
+            - "https://www.jobkorea.co.kr/Recruit/GI_Read/12345678"
+responses:
+  200:
+    description: 분석 성공
+    schema:
+      type: object
+      properties:
+        portfolio_rating:
+          type: string
+          example: "B+"
+        overall_job_fit:
+          type: integer
+          example: 72
+        strong_skills:
+          type: array
+          items:
+            type: string
+        weak_skills:
+          type: array
+          items:
+            type: string
+        readme_suggestions:
+          type: array
+          items:
+            type: string
+        repo_details:
+          type: array
+          items:
+            type: object
+        job_comparisons:
+          type: array
+          items:
+            type: object
+        total_commits:
+          type: integer
+        active_weeks:
+          type: integer
+  500:
+    description: 분석 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

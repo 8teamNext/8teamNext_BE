@@ -1,0 +1,48 @@
+tags:
+  - Profile
+summary: 사용자 프로필 저장
+description: 사용자 프로필을 DB에 저장합니다. 이력서와 자소서는 암호화되어 저장됩니다.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 사용자 이름
+          example: "김코딩"
+        github_username:
+          type: string
+          description: GitHub 사용자명
+          example: "kimcoding"
+        default_resume:
+          type: string
+          description: 기본 이력서 텍스트 (암호화 후 저장됨)
+          example: "3년차 백엔드 개발자입니다..."
+        default_cover_letter:
+          type: string
+          description: 기본 자기소개서 텍스트 (암호화 후 저장됨)
+          example: "저는 항상 사용자 경험을 최우선으로..."
+responses:
+  200:
+    description: 프로필 저장 성공
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+        github_username:
+          type: string
+        default_resume:
+          type: string
+        default_cover_letter:
+          type: string
+  400:
+    description: 잘못된 요청
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

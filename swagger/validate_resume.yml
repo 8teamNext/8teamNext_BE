@@ -1,0 +1,27 @@
+tags:
+  - Resume
+summary: 이력서 텍스트 유효성 검사
+description: 입력된 텍스트가 이력서로서 유효한지 검사합니다.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: 유효성을 검사할 이력서 텍스트
+          example: "안녕하세요. 3년차 백엔드 개발자 김코딩입니다..."
+responses:
+  200:
+    description: 검사 완료
+    schema:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        reason:
+          type: string

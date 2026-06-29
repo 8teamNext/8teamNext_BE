@@ -1,0 +1,23 @@
+tags:
+  - History
+summary: 분석 이력 삭제
+description: 특정 분석 이력 항목을 삭제합니다.
+parameters:
+  - name: id
+    in: path
+    required: true
+    type: string
+    description: 삭제할 이력 항목의 ID
+    example: "hist-a1b2c3"
+responses:
+  200:
+    description: 삭제 성공
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        message:
+          type: string
+          example: "History item deleted"

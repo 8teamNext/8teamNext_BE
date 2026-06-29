@@ -1,0 +1,60 @@
+tags:
+  - Cover Letter
+summary: 자기소개서 비교 분석
+description: 원본 자기소개서와 개선된 자기소개서를 비교하여 개선 포인트를 분석합니다.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - original_text
+        - improved_text
+      properties:
+        original_text:
+          type: string
+          description: 원본 자기소개서
+          example: "저는 개발자입니다. 열심히 하겠습니다."
+        improved_text:
+          type: string
+          description: 개선된 자기소개서
+          example: "3년간 핀테크 스타트업에서 결제 시스템 핵심 모듈을 개발하며 트랜잭션 성능을 40% 개선했습니다."
+responses:
+  200:
+    description: 비교 분석 성공
+    schema:
+      type: object
+      properties:
+        overall_summary:
+          type: string
+        improved_expressions:
+          type: array
+          items:
+            type: object
+            properties:
+              original:
+                type: string
+              improved:
+                type: string
+              reason:
+                type: string
+        added_experiences:
+          type: array
+          items:
+            type: string
+        strengthened_techs:
+          type: array
+          items:
+            type: string
+        remaining_gaps:
+          type: array
+          items:
+            type: string
+  500:
+    description: 분석 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

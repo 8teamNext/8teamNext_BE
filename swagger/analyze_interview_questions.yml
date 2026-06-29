@@ -1,0 +1,94 @@
+tags:
+  - Interview
+summary: 면접 질문 생성
+description: 자기소개서와 채용공고를 바탕으로 AI 면접 질문을 생성합니다. 잡코리아 URL을 입력하면 자동 크롤링합니다.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - cover_letter
+      properties:
+        cover_letter:
+          type: string
+          description: 자기소개서 전문
+          example: "저는 3년간 스타트업에서 풀스택 개발자로 근무하며..."
+        job_posting:
+          type: string
+          description: 채용공고 텍스트 또는 잡코리아 URL
+          example: "https://www.jobkorea.co.kr/Recruit/GI_Read/12345678"
+        style:
+          type: string
+          description: 면접 스타일
+          enum: [기본형, 압박형, 균형형]
+          default: 기본형
+        difficulty:
+          type: string
+          description: 면접 난이도
+          enum: [신입, 경력]
+          default: 신입
+responses:
+  200:
+    description: 면접 질문 생성 성공
+    schema:
+      type: object
+      properties:
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              category:
+                type: string
+              question:
+                type: string
+              intent:
+                type: string
+              suggested_keywords:
+                type: array
+                items:
+                  type: string
+              sample_answer_tip:
+                type: string
+              sample_answer:
+                type: string
+        job_posting_analysis:
+          type: object
+          nullable: true
+          properties:
+            summary:
+              type: string
+            skills:
+              type: array
+              items:
+                type: string
+            extracted_requirements:
+              type: array
+              items:
+                type: string
+            matched:
+              type: array
+              items:
+                type: string
+            unmatched:
+              type: array
+              items:
+                type: string
+  400:
+    description: 잘못된 요청
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+  500:
+    description: 생성 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

@@ -1,0 +1,133 @@
+tags:
+  - Unified
+summary: 종합 커리어 진단
+description: GitHub, 이력서, 채용공고를 삼점 비교하여 기술스택 일치도, 커밋 활동, 레포 커버리지, AI 총평을 종합 분석합니다.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - github_url
+        - resume_text
+        - job_urls
+      properties:
+        github_url:
+          type: string
+          description: GitHub 프로필 또는 레포지토리 URL
+          example: "https://github.com/kimcoding"
+        resume_text:
+          type: string
+          description: 이력서 전문 텍스트
+          example: "3년차 백엔드 개발자. Spring Boot, MySQL, Docker 경험..."
+        job_urls:
+          type: array
+          maxItems: 5
+          description: 비교할 채용공고 URL 목록 (최대 5개)
+          items:
+            type: string
+          example:
+            - "https://www.jobkorea.co.kr/Recruit/GI_Read/12345678"
+responses:
+  200:
+    description: 종합 분석 성공
+    schema:
+      type: object
+      properties:
+        portfolio_rating:
+          type: string
+          example: "B+"
+        overall_match_pct:
+          type: integer
+          description: 전체 매칭 비율 (%)
+        skill_match_pct:
+          type: integer
+          description: 기술스택 일치도 (%)
+        active_weeks:
+          type: integer
+          description: 최근 52주 중 커밋 활동 주 수
+        total_commits:
+          type: integer
+        repo_coverage_pct:
+          type: integer
+          description: 이력서 기술이 사용된 레포 비율 (%)
+        repo_count:
+          type: integer
+        github_analysis:
+          type: object
+          properties:
+            repo_count:
+              type: integer
+            total_commits:
+              type: integer
+            tech_stack:
+              type: array
+              items:
+                type: string
+            readme_quality:
+              type: string
+            project_completeness:
+              type: string
+            readme_suggestions:
+              type: array
+              items:
+                type: string
+            repo_details:
+              type: array
+              items:
+                type: object
+        resume_analysis:
+          type: object
+          properties:
+            resume_quality:
+              type: string
+            tech_stack_matching:
+              type: integer
+            verified_skills:
+              type: array
+              items:
+                type: string
+            unverified_skills:
+              type: array
+              items:
+                type: string
+            missing_skills:
+              type: array
+              items:
+                type: string
+        skill_gap:
+          type: object
+          properties:
+            missing_technologies:
+              type: array
+              items:
+                type: string
+            learning_roadmap:
+              type: array
+              items:
+                type: string
+        recommended_projects:
+          type: array
+          items:
+            type: object
+        comparison_result:
+          type: object
+          properties:
+            service:
+              type: string
+            overall_score:
+              type: integer
+            metrics:
+              type: array
+              items:
+                type: object
+            ai_comment:
+              type: string
+  500:
+    description: 분석 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

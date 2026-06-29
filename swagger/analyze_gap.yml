@@ -1,0 +1,73 @@
+tags:
+  - Gap Analysis
+summary: 기술 격차 분석
+description: GitHub 레포지토리와 이력서를 채용공고와 비교하여 보유 기술과 부족 기술을 분석합니다. resume_text가 없으면 저장된 프로필 이력서를 사용합니다.
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - job_urls
+      properties:
+        repo_urls:
+          type: array
+          maxItems: 5
+          description: 분석할 GitHub 레포지토리 URL 목록 (없으면 빈 배열)
+          items:
+            type: string
+          example:
+            - "https://github.com/user/repo1"
+        resume_text:
+          type: string
+          description: 이력서 텍스트 (없으면 저장된 프로필 이력서 사용)
+          example: "3년차 백엔드 개발자입니다. Spring Boot, Java, MySQL 사용 경험이 있습니다."
+        job_urls:
+          type: array
+          description: 비교할 채용공고 URL 목록
+          items:
+            type: string
+          example:
+            - "https://www.jobkorea.co.kr/Recruit/GI_Read/12345678"
+responses:
+  200:
+    description: 격차 분석 성공
+    schema:
+      type: object
+      properties:
+        proven_skills:
+          type: array
+          items:
+            type: string
+          description: 이력서와 GitHub 모두에서 확인된 기술
+        missing_skills:
+          type: array
+          items:
+            type: string
+          description: 채용공고 대비 부족한 기술
+        discovered_skills:
+          type: array
+          items:
+            type: string
+          description: GitHub에서 새로 발견된 기술
+        priority_skills:
+          type: array
+          items:
+            type: string
+          description: 우선 학습 추천 기술
+        company_rankings:
+          type: array
+          items:
+            type: object
+        recommended_projects:
+          type: array
+          items:
+            type: object
+  500:
+    description: 분석 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

@@ -1,0 +1,13 @@
+tags:
+  - Health
+summary: 서버 상태 확인
+description: API 서버가 정상 동작 중인지 확인합니다.
+responses:
+  200:
+    description: 서버 정상
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "AI기반 개발자 역량 분석 서비스입니다. Visit /docs for documentation."

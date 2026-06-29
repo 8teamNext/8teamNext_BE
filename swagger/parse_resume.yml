@@ -1,0 +1,42 @@
+tags:
+  - Resume
+summary: PDF 이력서 텍스트 추출
+description: 업로드한 PDF 파일에서 텍스트를 추출합니다. 스캔 이미지 PDF는 지원하지 않습니다.
+consumes:
+  - multipart/form-data
+parameters:
+  - in: formData
+    name: file
+    type: file
+    required: true
+    description: 업로드할 PDF 파일 (최대 10MB)
+responses:
+  200:
+    description: 텍스트 추출 성공
+    schema:
+      type: object
+      properties:
+        text:
+          type: string
+          description: 추출된 이력서 텍스트
+  400:
+    description: 파일 없음 또는 형식 오류
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+  422:
+    description: 텍스트 추출 불가 (이미지 PDF)
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+  500:
+    description: PDF 파싱 오류
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
