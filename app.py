@@ -82,6 +82,7 @@ swagger_template = {
             "name": "8team",
         },
     },
+    "schemes": ["https", "http"],
 }
 
 Swagger(app, config=swagger_config, template=swagger_template)
