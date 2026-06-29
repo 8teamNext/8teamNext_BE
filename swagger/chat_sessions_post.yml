@@ -1,0 +1,48 @@
+tags:
+  - name: Chat
+summary: 채팅 세션 생성
+description: 새로운 채팅 세션을 생성합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - owner
+      properties:
+        owner:
+          type: string
+          description: 세션 소유자 키
+          example: "user_001"
+        title:
+          type: string
+          description: 세션 제목 (기본값 "새 대화")
+          example: "면접 준비 상담"
+responses:
+  201:
+    description: 세션 생성 성공
+    schema:
+      type: object
+      properties:
+        session_id:
+          type: integer
+        owner_key:
+          type: string
+        title:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+  400:
+    description: owner 누락
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

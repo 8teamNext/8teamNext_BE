@@ -1,0 +1,40 @@
+tags:
+  - name: Chat
+summary: 채팅 세션 목록 조회
+description: 특정 owner의 채팅 세션 목록을 최신 업데이트 순으로 반환합니다.
+produces:
+  - application/json
+parameters:
+  - name: owner
+    in: query
+    type: string
+    required: true
+    description: 세션 소유자 키 (사용자 식별자)
+    example: "user_001"
+responses:
+  200:
+    description: 세션 목록 반환
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          session_id:
+            type: integer
+          owner_key:
+            type: string
+          title:
+            type: string
+          created_at:
+            type: string
+            example: "2026-06-29T14:30:00"
+          updated_at:
+            type: string
+            example: "2026-06-29T15:00:00"
+  400:
+    description: owner 파라미터 누락
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

@@ -1,0 +1,34 @@
+tags:
+  - name: Utility
+summary: 텍스트 암호화
+description: 평문 텍스트를 암호화하여 반환합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        text:
+          type: string
+          description: 암호화할 평문 텍스트
+          example: "암호화할 내용입니다."
+responses:
+  200:
+    description: 암호화 성공
+    schema:
+      type: object
+      properties:
+        encrypted:
+          type: string
+  500:
+    description: 암호화 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

@@ -1,0 +1,24 @@
+tags:
+  - name: Profile
+summary: 프로필 조회
+description: 저장된 사용자 프로필(이름, GitHub 사용자명, 기본 이력서, 기본 자소서)을 조회합니다.
+produces:
+  - application/json
+responses:
+  200:
+    description: 프로필 조회 성공
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "홍길동"
+        github_username:
+          type: string
+          example: "kimcoding"
+        default_resume:
+          type: string
+          description: 기본 이력서 텍스트
+        default_cover_letter:
+          type: string
+          description: 기본 자기소개서 텍스트

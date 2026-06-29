@@ -1,0 +1,67 @@
+tags:
+  - name: Leancage
+summary: 이력서-채용공고 Leancage 분석
+description: 채용공고 URL을 직접 크롤링한 뒤 이력서와 비교하여 Leancage 포맷으로 분석 결과를 반환합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - resume_text
+        - job_urls
+      properties:
+        resume_text:
+          type: string
+          description: 이력서 원문 텍스트
+          example: "홍길동 / 백엔드 개발자 / Python, Django, MySQL..."
+        job_urls:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 5
+          description: 채용공고 URL 목록 (1~5개)
+          example:
+            - "https://www.jobkorea.co.kr/Recruit/GI_Read/12345"
+responses:
+  200:
+    description: 분석 성공
+    schema:
+      type: object
+      properties:
+        service:
+          type: string
+          example: "leancage"
+        overall_score:
+          type: integer
+          example: 75
+        metrics:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              score:
+                type: integer
+              detail:
+                type: string
+        raw:
+          type: object
+        detail:
+          type: object
+  400:
+    description: 요청 파라미터 오류
+    schema:
+      type: object
+      properties:
+        error:
+          type: string

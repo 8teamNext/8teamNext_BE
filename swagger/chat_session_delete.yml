@@ -1,0 +1,22 @@
+tags:
+  - name: Chat
+summary: 채팅 세션 삭제
+description: 특정 채팅 세션과 해당 세션의 모든 메시지를 삭제합니다.
+produces:
+  - application/json
+parameters:
+  - name: session_id
+    in: path
+    type: integer
+    required: true
+    description: 삭제할 세션 ID
+    example: 1
+responses:
+  200:
+    description: 삭제 성공
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"

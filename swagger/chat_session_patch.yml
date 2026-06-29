@@ -1,0 +1,43 @@
+tags:
+  - name: Chat
+summary: 채팅 세션 제목 수정
+description: 특정 채팅 세션의 제목을 변경합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - name: session_id
+    in: path
+    type: integer
+    required: true
+    description: 수정할 세션 ID
+    example: 1
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          description: 새 세션 제목
+          example: "백엔드 개발자 면접 준비"
+responses:
+  200:
+    description: 수정 성공
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+  400:
+    description: title 누락
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

@@ -1,0 +1,60 @@
+tags:
+  - name: Interview
+summary: 면접 질문 모범 답변 생성
+description: 특정 면접 질문에 대한 맞춤형 모범 답변을 생성합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - question
+        - cover_letter
+        - intent
+        - suggested_keywords
+      properties:
+        question:
+          type: string
+          description: 면접 질문
+          example: "본인의 가장 도전적인 프로젝트 경험을 말해주세요."
+        cover_letter:
+          type: string
+          description: 자기소개서 전문
+        intent:
+          type: string
+          description: 질문 의도
+          example: "문제 해결 능력과 성장 경험을 확인"
+        suggested_keywords:
+          type: array
+          items:
+            type: string
+          description: 답변에 포함할 키워드
+          example: ["문제 해결", "협업", "성과"]
+        style:
+          type: string
+          enum: ["기본형", "압박형", "균형형"]
+          default: "기본형"
+        difficulty:
+          type: string
+          enum: ["신입", "경력"]
+          default: "신입"
+responses:
+  200:
+    description: 모범 답변 생성 성공
+    schema:
+      type: object
+      properties:
+        sample_answer:
+          type: string
+  500:
+    description: 생성 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

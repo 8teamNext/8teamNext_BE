@@ -1,0 +1,52 @@
+tags:
+  - name: Profile
+summary: 프로필 저장
+description: 사용자 프로필(이름, GitHub 사용자명, 기본 이력서, 기본 자소서)을 저장합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 사용자 이름
+          example: "홍길동"
+        github_username:
+          type: string
+          description: GitHub 사용자명
+          example: "kimcoding"
+        default_resume:
+          type: string
+          description: 기본 이력서 텍스트
+          example: "홍길동 / 백엔드 개발자 / Python, Django..."
+        default_cover_letter:
+          type: string
+          description: 기본 자기소개서 텍스트
+          example: "저는 문제 해결에 열정을 가진 개발자입니다..."
+responses:
+  200:
+    description: 프로필 저장 성공
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+        github_username:
+          type: string
+        default_resume:
+          type: string
+        default_cover_letter:
+          type: string
+  400:
+    description: 요청 오류
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

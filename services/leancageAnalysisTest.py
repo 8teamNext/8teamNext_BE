@@ -11,48 +11,32 @@ leancageAnalysis 테스트 라우터
     GET  /api/leancage/health        — 서비스 상태 확인
 """
 
+import os
 import asyncio
 from flask import Blueprint, request, jsonify
+from flasgger import swag_from
 
 from services.leancageAnalysis import leancage_analysis
 from services.parsers.parser_router import parse_job
 
 leancage_test_bp = Blueprint("leancage_test", __name__)
 
+_SW = lambda f: os.path.join(os.path.dirname(__file__), '..', 'swagger', f)
+
 
 # ─── GET /api/leancage/health ─────────────────────────────────────────────────
 
 @leancage_test_bp.route("/api/leancage/health", methods=["GET"])
+@swag_from(_SW('leancage_health.yml'))
 def leancage_health():
-    """서비스 상태 확인"""
     return jsonify({"status": "ok", "service": "leancage"})
 
 
 # ─── POST /api/leancage/analyze ───────────────────────────────────────────────
 
 @leancage_test_bp.route("/api/leancage/analyze", methods=["POST"])
+@swag_from(_SW('leancage_analyze.yml'))
 async def leancage_analyze():
-    """
-    채용공고 URL을 직접 파싱한 뒤 이력서와 비교 분석합니다.
-
-    Request Body:
-        {
-            "resume_text": "이력서 원문 텍스트",
-            "job_urls": [
-                "https://www.jobkorea.co.kr/Recruit/GI_Read/...",
-                ...
-            ]
-        }
-
-    Response: LeancageResult 공통 포맷
-        {
-            "service": "leancage",
-            "overall_score": 75,
-            "metrics": [...],
-            "raw": {...},
-            "detail": {...}
-        }
-    """
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body가 필요합니다."}), 400
@@ -85,27 +69,8 @@ async def leancage_analyze():
 # ─── POST /api/leancage/analyze/mock ─────────────────────────────────────────
 
 @leancage_test_bp.route("/api/leancage/analyze/mock", methods=["POST"])
+@swag_from(_SW('leancage_analyze_mock.yml'))
 async def leancage_analyze_mock():
-    """
-    파싱된 jobs를 직접 전달해 분석합니다. (URL 크롤링 없이 단위 테스트용)
-
-    Request Body:
-        {
-            "resume_text": "이력서 원문 텍스트",
-            "parsed_jobs": [
-                {
-                    "url": "https://example.com/job/1",
-                    "company": "카카오",
-                    "title": "백엔드 개발자",
-                    "job_type": "경력",
-                    "tasks": ["REST API 개발", "MySQL 운영"],
-                    "tech_stack": ["Java", "Spring Boot", "MySQL", "Docker"],
-                    "raw_text": "",
-                    "error": null
-                }
-            ]
-        }
-    """
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body가 필요합니다."}), 400

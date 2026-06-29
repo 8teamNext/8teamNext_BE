@@ -1,0 +1,87 @@
+tags:
+  - name: Leancage
+summary: Leancage 분석 (Mock - 파싱된 데이터 직접 입력)
+description: 이미 파싱된 채용공고 데이터를 직접 전달하여 URL 크롤링 없이 Leancage 분석을 수행합니다. 단위 테스트용.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - resume_text
+        - parsed_jobs
+      properties:
+        resume_text:
+          type: string
+          description: 이력서 원문 텍스트
+          example: "홍길동 / 백엔드 개발자 / Python, Django, MySQL..."
+        parsed_jobs:
+          type: array
+          description: 이미 파싱된 채용공고 목록
+          items:
+            type: object
+            required:
+              - url
+              - company
+              - title
+              - tech_stack
+            properties:
+              url:
+                type: string
+                example: "https://example.com/job/1"
+              company:
+                type: string
+                example: "카카오"
+              title:
+                type: string
+                example: "백엔드 개발자"
+              job_type:
+                type: string
+                example: "경력"
+              tasks:
+                type: array
+                items:
+                  type: string
+                example: ["REST API 개발", "MySQL 운영"]
+              tech_stack:
+                type: array
+                items:
+                  type: string
+                example: ["Java", "Spring Boot", "MySQL", "Docker"]
+              raw_text:
+                type: string
+                example: ""
+              error:
+                type: string
+                nullable: true
+responses:
+  200:
+    description: 분석 성공
+    schema:
+      type: object
+      properties:
+        service:
+          type: string
+          example: "leancage"
+        overall_score:
+          type: integer
+        metrics:
+          type: array
+          items:
+            type: object
+        raw:
+          type: object
+        detail:
+          type: object
+  400:
+    description: 요청 파라미터 오류
+    schema:
+      type: object
+      properties:
+        error:
+          type: string

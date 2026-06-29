@@ -1,0 +1,18 @@
+tags:
+  - name: Chat
+summary: RAG 문서 재인덱싱 (관리자용)
+description: RAG 서비스의 문서를 재인덱싱합니다. 관리자 전용 엔드포인트입니다.
+produces:
+  - application/json
+responses:
+  200:
+    description: 재인덱싱 성공
+    schema:
+      type: object
+      properties:
+        indexed:
+          type: integer
+          description: 인덱싱된 문서 수
+        status:
+          type: string
+          example: "ok"

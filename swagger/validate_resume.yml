@@ -1,0 +1,29 @@
+tags:
+  - name: Resume
+summary: 이력서 텍스트 유효성 검사
+description: 이력서 텍스트가 분석에 사용 가능한지 유효성을 검사합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      properties:
+        text:
+          type: string
+          description: 검사할 이력서 텍스트
+          example: "홍길동 / 백엔드 개발자 / Python, Django, MySQL"
+responses:
+  200:
+    description: 유효성 검사 결과
+    schema:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        reason:
+          type: string

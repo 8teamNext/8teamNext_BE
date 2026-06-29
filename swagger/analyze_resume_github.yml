@@ -1,0 +1,75 @@
+tags:
+  - name: Analyze
+summary: 이력서-GitHub 연동 분석
+description: 이력서에 기재된 기술 스택과 GitHub 실제 코드를 대조하여 증빙 여부를 분석합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - github_username
+        - tech_stack
+      properties:
+        resume_text:
+          type: string
+          description: 이력서 원문 텍스트 (미입력 시 저장된 프로필 이력서 사용)
+          example: ""
+        resume_url:
+          type: string
+          nullable: true
+          description: 이력서 URL (선택)
+        github_username:
+          type: string
+          description: GitHub 사용자명
+          example: "kimcoding"
+        tech_stack:
+          type: array
+          items:
+            type: string
+          description: 이력서에 기재된 기술 스택 목록
+          example: ["Python", "React", "Docker"]
+responses:
+  200:
+    description: 분석 성공
+    schema:
+      type: object
+      properties:
+        overall_evaluation:
+          type: string
+        resume_skills:
+          type: array
+          items:
+            type: string
+        github_skills:
+          type: array
+          items:
+            type: string
+        verified_skills:
+          type: array
+          items:
+            type: string
+        unverified_skills:
+          type: array
+          items:
+            type: string
+        newly_discovered_skills:
+          type: array
+          items:
+            type: string
+        supplement_advice:
+          type: string
+        update_suggestion:
+          type: string
+  500:
+    description: 분석 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

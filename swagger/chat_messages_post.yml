@@ -1,0 +1,53 @@
+tags:
+  - name: Chat
+summary: 채팅 메시지 전송 (RAG)
+description: 사용자 메시지를 전송하면 RAG 기반으로 AI 응답을 생성하여 반환합니다. 첫 메시지 전송 시 세션 제목이 자동 설정됩니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - name: session_id
+    in: path
+    type: integer
+    required: true
+    description: 메시지를 전송할 세션 ID
+    example: 1
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: 사용자 메시지 내용
+          example: "Python 백엔드 개발자로 취업하려면 어떤 기술을 준비해야 하나요?"
+responses:
+  200:
+    description: AI 응답 반환
+    schema:
+      type: object
+      properties:
+        role:
+          type: string
+          example: "assistant"
+        content:
+          type: string
+          example: "Python 백엔드 개발자로 취업하기 위해서는..."
+  400:
+    description: content 누락
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+  404:
+    description: 세션을 찾을 수 없음
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

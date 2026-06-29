@@ -1,0 +1,70 @@
+tags:
+  - name: Crawl
+summary: 채용공고 URL 크롤링
+description: 채용공고 URL 1~5개를 병렬로 크롤링하여 직무, 회사, 기술 스택 정보를 추출합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - urls
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 5
+          description: 크롤링할 채용공고 URL 목록 (1~5개)
+          example:
+            - "https://www.jobkorea.co.kr/Recruit/GI_Read/12345"
+responses:
+  200:
+    description: 크롤링 결과 반환
+    schema:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              url_index:
+                type: integer
+              status:
+                type: string
+                enum: ["success", "failed"]
+              title:
+                type: string
+              company:
+                type: string
+              job_type:
+                type: string
+              tech_stack:
+                type: array
+                items:
+                  type: string
+              positions:
+                type: array
+                items:
+                  type: string
+              tasks:
+                type: array
+                items:
+                  type: string
+              error:
+                type: string
+                nullable: true
+  400:
+    description: 요청 파라미터 오류
+    schema:
+      type: object
+      properties:
+        error:
+          type: string

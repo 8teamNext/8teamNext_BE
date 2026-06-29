@@ -1,0 +1,98 @@
+tags:
+  - name: Interview
+summary: 면접 질문 생성
+description: 자기소개서와 채용공고를 기반으로 맞춤형 면접 질문을 생성합니다. 잡코리아 URL 입력 시 자동 크롤링합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - cover_letter
+      properties:
+        cover_letter:
+          type: string
+          description: 자기소개서 전문
+          example: "저는 백엔드 개발자로서 3년간 Python과 Django를 활용하여..."
+        job_posting:
+          type: string
+          description: 채용공고 텍스트 또는 잡코리아 URL (선택)
+          example: ""
+        style:
+          type: string
+          enum: ["기본형", "압박형", "균형형"]
+          default: "기본형"
+          description: 면접 질문 스타일
+        difficulty:
+          type: string
+          enum: ["신입", "경력"]
+          default: "신입"
+          description: 난이도
+responses:
+  200:
+    description: 면접 질문 생성 성공
+    schema:
+      type: object
+      properties:
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              category:
+                type: string
+              question:
+                type: string
+              intent:
+                type: string
+              suggested_keywords:
+                type: array
+                items:
+                  type: string
+              sample_answer_tip:
+                type: string
+              sample_answer:
+                type: string
+        job_posting_analysis:
+          type: object
+          nullable: true
+          properties:
+            summary:
+              type: string
+            skills:
+              type: array
+              items:
+                type: string
+            extracted_requirements:
+              type: array
+              items:
+                type: string
+            matched:
+              type: array
+              items:
+                type: string
+            unmatched:
+              type: array
+              items:
+                type: string
+  400:
+    description: 요청 파라미터 오류
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+  500:
+    description: 생성 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

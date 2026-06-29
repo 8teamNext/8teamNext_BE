@@ -1,0 +1,88 @@
+tags:
+  - name: Analyze
+summary: GitHub + 채용공고 메인 분석
+description: GitHub 사용자명과 채용공고 URL을 받아 기술 스택 추출 및 JD 매칭을 병렬로 수행합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - github_username
+        - job_urls
+      properties:
+        github_username:
+          type: string
+          description: GitHub 사용자명
+          example: "kimcoding"
+        job_urls:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 5
+          description: 비교할 채용공고 URL 목록 (1~5개)
+          example: ["https://www.jobkorea.co.kr/Recruit/GI_Read/12345"]
+responses:
+  200:
+    description: 분석 성공
+    schema:
+      type: object
+      properties:
+        github:
+          type: object
+          properties:
+            username:
+              type: string
+            confirmed_skills:
+              type: array
+              items:
+                type: string
+            inferred_skills:
+              type: array
+              items:
+                type: string
+            raw_languages:
+              type: object
+            package_skills:
+              type: array
+              items:
+                type: string
+        matching:
+          type: array
+          items:
+            type: object
+            properties:
+              url_index:
+                type: integer
+              status:
+                type: string
+              title:
+                type: string
+              company:
+                type: string
+              job_type:
+                type: string
+              tech_stack:
+                type: array
+                items:
+                  type: string
+  400:
+    description: 요청 파라미터 오류
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+  404:
+    description: GitHub 사용자를 찾을 수 없음
+    schema:
+      type: object
+      properties:
+        error:
+          type: string

@@ -5,11 +5,15 @@
 - 원문/URL 로그 저장 없음
 """
 
+import os
 import asyncio
 from flask import Blueprint, request, jsonify
+from flasgger import swag_from
 from services.parsers.parser_router import parse_job
 
 crawler_bp = Blueprint("crawler", __name__)
+
+_SW = lambda f: os.path.join(os.path.dirname(__file__), '..', 'swagger', f)
 
 
 async def _parse_with_index(index: int, url: str) -> dict:
@@ -45,6 +49,7 @@ async def _parse_with_index(index: int, url: str) -> dict:
 
 
 @crawler_bp.route("/crawl", methods=["POST"])
+@swag_from(_SW('crawl.yml'))
 async def crawl():
     data = request.get_json(silent=True)
 

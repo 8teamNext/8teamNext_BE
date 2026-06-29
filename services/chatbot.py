@@ -1,13 +1,18 @@
 """챗봇 API Blueprint: 세션 관리 + RAG 메시지 처리."""
+import os
 from flask import Blueprint, request, jsonify
+from flasgger import swag_from
 from db import fetch_all, fetch_one, execute
 from services.chat_service import chat_rag
 
 chatbot_bp = Blueprint("chatbot", __name__)
 
+_SW = lambda f: os.path.join(os.path.dirname(__file__), '..', 'swagger', f)
+
 
 # ── 세션 목록 조회 ────────────────────────────────────────────────────────
 @chatbot_bp.route("/api/chat/sessions", methods=["GET"])
+@swag_from(_SW('chat_sessions_get.yml'))
 async def list_sessions():
     owner = request.args.get("owner", "").strip()
     if not owner:
@@ -29,6 +34,7 @@ async def list_sessions():
 
 # ── 세션 생성 ─────────────────────────────────────────────────────────────
 @chatbot_bp.route("/api/chat/sessions", methods=["POST"])
+@swag_from(_SW('chat_sessions_post.yml'))
 async def create_session():
     data = request.get_json() or {}
     owner = data.get("owner", "").strip()
@@ -53,6 +59,7 @@ async def create_session():
 
 # ── 세션 삭제 ─────────────────────────────────────────────────────────────
 @chatbot_bp.route("/api/chat/sessions/<int:session_id>", methods=["DELETE"])
+@swag_from(_SW('chat_session_delete.yml'))
 async def delete_session(session_id: int):
     await execute("DELETE FROM chat_sessions WHERE session_id = %s", (session_id,))
     return jsonify({"status": "success"})
@@ -60,6 +67,7 @@ async def delete_session(session_id: int):
 
 # ── 세션 제목 수정 ────────────────────────────────────────────────────────
 @chatbot_bp.route("/api/chat/sessions/<int:session_id>", methods=["PATCH"])
+@swag_from(_SW('chat_session_patch.yml'))
 async def rename_session(session_id: int):
     data = request.get_json() or {}
     title = data.get("title", "").strip()
@@ -74,6 +82,7 @@ async def rename_session(session_id: int):
 
 # ── 메시지 목록 조회 ──────────────────────────────────────────────────────
 @chatbot_bp.route("/api/chat/sessions/<int:session_id>/messages", methods=["GET"])
+@swag_from(_SW('chat_messages_get.yml'))
 async def get_messages(session_id: int):
     rows = await fetch_all(
         """SELECT message_id, session_id, role, content, created_at
@@ -90,6 +99,7 @@ async def get_messages(session_id: int):
 
 # ── 메시지 전송 (RAG) ─────────────────────────────────────────────────────
 @chatbot_bp.route("/api/chat/sessions/<int:session_id>/messages", methods=["POST"])
+@swag_from(_SW('chat_messages_post.yml'))
 async def send_message(session_id: int):
     data = request.get_json() or {}
     content = data.get("content", "").strip()
@@ -147,6 +157,7 @@ async def send_message(session_id: int):
 
 # ── RAG 문서 재인덱싱 (관리자용) ─────────────────────────────────────────
 @chatbot_bp.route("/api/chat/reindex", methods=["POST"])
+@swag_from(_SW('chat_reindex.yml'))
 async def reindex_docs():
     from services.rag_service import index_documents
     result = await index_documents()

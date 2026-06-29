@@ -1,0 +1,26 @@
+tags:
+  - name: History
+summary: 분석 히스토리 조회
+description: 현재 세션의 분석 히스토리 목록을 최신순으로 반환합니다.
+produces:
+  - application/json
+responses:
+  200:
+    description: 히스토리 목록 반환
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+            example: "hist-abc123"
+          type:
+            type: string
+            enum: ["github", "gap", "resume-github", "interview", "cover-letter"]
+          date:
+            type: string
+            example: "2026-06-29 14:30"
+          summary:
+            type: string
+            example: "GitHub 분석: 매칭 적합도 78%"

@@ -1,0 +1,50 @@
+tags:
+  - name: GitHub
+summary: GitHub 사용자 기술 스택 미리보기
+description: GitHub 사용자명으로 언어 및 기술 스택을 미리 확인합니다.
+produces:
+  - application/json
+parameters:
+  - name: username
+    in: query
+    type: string
+    required: true
+    description: GitHub 사용자명
+    example: "kimcoding"
+responses:
+  200:
+    description: 미리보기 성공
+    schema:
+      type: object
+      properties:
+        username:
+          type: string
+        confirmed_skills:
+          type: array
+          items:
+            type: string
+        inferred_skills:
+          type: array
+          items:
+            type: string
+        raw_languages:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            Python: 60.5
+            TypeScript: 30.2
+  400:
+    description: username 파라미터 누락
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+  404:
+    description: GitHub 사용자를 찾을 수 없음
+    schema:
+      type: object
+      properties:
+        error:
+          type: string

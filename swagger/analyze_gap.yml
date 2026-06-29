@@ -1,0 +1,102 @@
+tags:
+  - name: Analyze
+summary: Gap 분석
+description: GitHub 레포지토리, 이력서, 채용공고를 비교하여 부족한 기술과 추천 프로젝트를 도출합니다.
+consumes:
+  - application/json
+produces:
+  - application/json
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - job_urls
+      properties:
+        repo_urls:
+          type: array
+          items:
+            type: string
+          description: GitHub 레포지토리 URL 목록 (선택)
+          example: []
+        resume_text:
+          type: string
+          description: 이력서 원문 텍스트 (선택, 미입력 시 저장된 프로필 이력서 사용)
+          example: ""
+        job_urls:
+          type: array
+          items:
+            type: string
+          description: 비교할 채용공고 URL 목록
+          example: ["https://www.jobkorea.co.kr/Recruit/GI_Read/12345"]
+responses:
+  200:
+    description: Gap 분석 성공
+    schema:
+      type: object
+      properties:
+        proven_skills:
+          type: array
+          items:
+            type: string
+        missing_skills:
+          type: array
+          items:
+            type: string
+        discovered_skills:
+          type: array
+          items:
+            type: string
+        priority_skills:
+          type: array
+          items:
+            type: string
+        company_rankings:
+          type: array
+          items:
+            type: object
+            properties:
+              rank:
+                type: integer
+              company_name:
+                type: string
+              role:
+                type: string
+              job_url:
+                type: string
+              fit_score:
+                type: integer
+              reason:
+                type: string
+        recommended_projects:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+              technologies:
+                type: array
+                items:
+                  type: string
+              missing_skills_covered:
+                type: array
+                items:
+                  type: string
+              difficulty:
+                type: string
+              impact:
+                type: string
+              architecture:
+                type: string
+  500:
+    description: 분석 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

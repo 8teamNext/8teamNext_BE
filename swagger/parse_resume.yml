@@ -1,0 +1,44 @@
+tags:
+  - name: Resume
+summary: PDF 이력서 텍스트 추출
+description: 업로드된 PDF 파일에서 텍스트를 추출합니다. PDF 형식만 지원합니다.
+consumes:
+  - multipart/form-data
+produces:
+  - application/json
+parameters:
+  - in: formData
+    name: file
+    type: file
+    required: true
+    description: 업로드할 PDF 이력서 파일
+responses:
+  200:
+    description: 텍스트 추출 성공
+    schema:
+      type: object
+      properties:
+        text:
+          type: string
+          description: PDF에서 추출한 텍스트
+  400:
+    description: 파일 없음 또는 지원하지 않는 형식
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+  422:
+    description: 텍스트 추출 불가 (스캔 이미지 PDF)
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+  500:
+    description: PDF 파싱 실패
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string

@@ -1,4 +1,5 @@
 import asyncio
+import os
 import uuid
 import re
 from datetime import datetime
@@ -7,7 +8,8 @@ load_dotenv()
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
-from services.crawler import crawler_bp 
+from flasgger import Swagger, swag_from
+from services.crawler import crawler_bp
 from services.parsers.jobkorea_parser_v2 import parse_jobkorea
 from services.github_analyzer import analyze_github
 from services.github_service import test_github
@@ -52,6 +54,37 @@ app = Flask(__name__)
 
 # Configure CORS
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Swagger 설정
+_SW_DIR = os.path.join(os.path.dirname(__file__), 'swagger')
+
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "apispec",
+            "route": "/api/apispec.json",
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/api/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/api/apidocs",
+}
+
+swagger_template = {
+    "info": {
+        "title": "AI기반 개발자 취업역량 분석 서비스 API by Next",
+        "description": "GitHub와 이력서, 채용공고 삼점 비교분석 , 면접 질문 생성 등 AI 커리어 서비스 API",
+        "version": "1.0.0",
+        "contact": {
+            "name": "8team",
+        },
+    },
+}
+
+Swagger(app, config=swagger_config, template=swagger_template)
 
 # In-memory history (프로필은 DB로 전환)
 db_history: List[AnalysisHistoryItem] = []
@@ -105,11 +138,9 @@ async def _save_profile_to_db(profile: UserProfile):
 # --- Endpoints ---
 
 @app.route("/", methods=["GET"])
+@swag_from(os.path.join(_SW_DIR, 'root.yml'))
 def read_root():
     return jsonify({"message": "Welcome to AI Career Copilot API. Visit /docs for documentation."})
-
-# @app.route('/api/recruit', methods=['GET'])
-# def get_recruitment():
 
 CORS(app, resources={r"/*": {"origins": "*"}})
 app.register_blueprint(crawler_bp)
@@ -118,6 +149,7 @@ app.register_blueprint(leancage_test_bp)
 app.register_blueprint(chatbot_bp)
 
 @app.route("/api/debug/crawl", methods=["GET"])
+@swag_from(os.path.join(_SW_DIR, 'debug_crawl.yml'))
 def api_debug_crawl():
     url = request.args.get("url", "")
     if not url:
@@ -136,12 +168,13 @@ def api_debug_crawl():
     })
 
 @app.route("/api/analyze/github", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_github.yml'))
 def api_analyze_github():
     try:
         data = request.get_json()
         payload = GithubAnalysisRequest.model_validate(data)
         response = analyze_github(payload.repo_urls, payload.job_urls)
-        
+
         # Save to history
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",
@@ -150,75 +183,42 @@ def api_analyze_github():
             summary=f"GitHub 분석: 매칭 적합도 {response.overall_job_fit}%"
         )
         db_history.insert(0, new_hist)
-        
+
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"GitHub analysis failed: {str(e)}"}), 500
-    
-# """
-#     POST /api/analyze
-#     body: {
-#         "github_username": "kimcoding",
-#         "job_urls": ["https://www.jobkorea.co.kr/..."]
-#     }
- 
-#     반환:
-#     {
-#         "github": {
-#             "username": "kimcoding",
-#             "confirmed_skills": ["TypeScript", "JavaScript"],
-#             "inferred_skills": ["React", "Next.js"],
-#             "raw_languages": {"TypeScript": 60.5, ...}
-#         },
-#         "matching": [
-#             {
-#                 "url_index": 0,
-#                 "status": "success",
-#                 "title": "프론트엔드 개발자",
-#                 "company": "회사명",
-#                 "job_type": "신입",
-#                 "jd_total": 3,
-#                 "confirmed_score": 66.7,
-#                 "inferred_score": 33.3,
-#                 "confirmed_matched": ["TypeScript"],
-#                 "inferred_matched": ["React"],
-#                 "missing": ["Docker"],
-#                 "extra_confirmed": ["JavaScript"]
-#             }
-#         ]
-#     }
-#     """
 
 @app.route("/api/analyze", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze.yml'))
 async def api_analyze():
     data = request.get_json(silent=True)
- 
+
     # 검증
     if not data:
         return jsonify({"error": "요청 body가 없습니다."}), 400
- 
+
     github_username = data.get("github_username", "").strip()
     job_urls = data.get("job_urls", [])
- 
+
     if not github_username:
         return jsonify({"error": "github_username이 필요합니다."}), 400
- 
+
     if not isinstance(job_urls, list) or len(job_urls) == 0:
         return jsonify({"error": "job_urls는 1개 이상이어야 합니다."}), 400
- 
+
     if len(job_urls) > 5:
         return jsonify({"error": "job_urls는 최대 5개까지 가능합니다."}), 400
- 
+
     for url in job_urls:
         if not isinstance(url, str) or not url.startswith("http"):
             return jsonify({"error": f"올바르지 않은 URL: {url}"}), 400
- 
+
     # GitHub 분석 + 크롤링 병렬 실행
     import asyncio
     from services.github_service import test_github
     from services.llm_service import infer_skills
     from services.parsers.parser_router import parse_job
- 
+
     async def crawl_all(urls: list[str]) -> list[dict]:
         tasks = [parse_job(url) for url in urls]
         results = await asyncio.gather(*tasks)
@@ -242,7 +242,7 @@ async def api_analyze():
                     "positions": d.get("positions", []),
                 })
         return crawl_results
- 
+
     async def github_analyze(username: str) -> dict:
         github_result = await test_github(username)
         if github_result.get("error"):
@@ -261,25 +261,25 @@ async def api_analyze():
             "package_skills": github_result.get("package_skills", []),
             "error": None,
         }
- 
+
     # 병렬 실행
     crawl_result, github_result = await asyncio.gather(
         crawl_all(job_urls),
         github_analyze(github_username),
     )
- 
+
     # GitHub 분석 실패
     if github_result.get("error"):
         status = 404 if "찾을 수 없습니다" in github_result["error"] else 400
         return jsonify({"error": github_result["error"]}), status
- 
+
     # 매칭 계산
     matching = match_all(
         confirmed_skills=github_result["confirmed_skills"],
         inferred_skills=github_result["inferred_skills"],
         crawl_results=crawl_result,
     )
- 
+
     return jsonify({
         "github": {
             "username": github_result["username"],
@@ -292,8 +292,8 @@ async def api_analyze():
     })
 
 
-
 @app.route("/api/analyze/gap", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_gap.yml'))
 async def api_analyze_gap():
     try:
         data = request.get_json()
@@ -304,7 +304,7 @@ async def api_analyze_gap():
         resume = payload.resume_text if payload.resume_text else _profile.default_resume
 
         response = await analyze_gap(payload.repo_urls, resume, payload.job_urls)
-        
+
         # Save to history
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",
@@ -313,12 +313,13 @@ async def api_analyze_gap():
             summary=f"Gap 분석: 입증 기술 {len(response.proven_skills)}개, 부족 기술 {len(response.missing_skills)}개"
         )
         db_history.insert(0, new_hist)
-        
+
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"Gap analysis failed: {str(e)}"}), 500
 
 @app.route("/api/analyze/resume-github", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_resume_github.yml'))
 async def api_analyze_resume_github():
     try:
         data = request.get_json()
@@ -330,7 +331,7 @@ async def api_analyze_resume_github():
             payload.github_username,
             payload.tech_stack
         )
-        
+
         # Save to history
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",
@@ -339,13 +340,14 @@ async def api_analyze_resume_github():
             summary=f"이력서-GitHub 분석: 검증완료 {len(response.verified_skills)}개"
         )
         db_history.insert(0, new_hist)
-        
+
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"Resume-GitHub linkage analysis failed: {str(e)}"}), 500
 
 
 @app.route("/api/validate-resume", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'validate_resume.yml'))
 async def api_validate_resume():
     data = request.get_json() or {}
     text = data.get("text", "")
@@ -353,6 +355,7 @@ async def api_validate_resume():
 
 
 @app.route("/api/parse-resume", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'parse_resume.yml'))
 async def api_parse_resume():
     if 'file' not in request.files:
         return jsonify({"detail": "파일이 없습니다."}), 400
@@ -372,6 +375,7 @@ async def api_parse_resume():
 
 
 @app.route("/api/analyze/interview-questions", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_interview_questions.yml'))
 async def api_analyze_interview_questions():
     try:
         data = request.get_json()
@@ -420,6 +424,7 @@ async def api_analyze_interview_questions():
         return jsonify({"detail": f"Interview question generation failed: {str(e)}"}), 500
 
 @app.route("/api/analyze/sample-answer", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_sample_answer.yml'))
 def api_sample_answer():
     try:
         from models import SampleAnswerRequest
@@ -439,6 +444,7 @@ def api_sample_answer():
         return jsonify({"detail": f"모범 답변 생성 실패: {str(e)}"}), 500
 
 @app.route("/api/analyze/followup-question", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_followup_question.yml'))
 def api_followup_question():
     try:
         from models import FollowupRequest
@@ -453,12 +459,13 @@ def api_followup_question():
         return jsonify({"detail": f"꼬리질문 생성 실패: {str(e)}"}), 500
 
 @app.route("/api/analyze/cover-letter-compare", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_cover_letter_compare.yml'))
 async def api_analyze_cover_letter_compare():
     try:
         data = request.get_json()
         payload = CoverLetterCompareRequest.model_validate(data)
         response = await compare_cover_letters(payload.original_text, payload.improved_text)
-        
+
         # Save to history
         new_hist = AnalysisHistoryItem(
             id=f"hist-{uuid.uuid4().hex[:6]}",
@@ -467,12 +474,13 @@ async def api_analyze_cover_letter_compare():
             summary=f"자소서 비교 분석 완료: 개선된 표현 {len(response.improved_expressions)}개"
         )
         db_history.insert(0, new_hist)
-        
+
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"Cover letter comparison failed: {str(e)}"}), 500
 
 @app.route("/api/github/preview", methods=["GET"])
+@swag_from(os.path.join(_SW_DIR, 'github_preview.yml'))
 async def api_github_preview():
     username = request.args.get("username", "").strip()
 
@@ -489,7 +497,7 @@ async def api_github_preview():
         username=username,
         languages=github_result["languages"],
         topics=github_result["topics"],
-        package_skills=github_result.get("package_skills", []),  # 추가
+        package_skills=github_result.get("package_skills", []),
     )
 
     return jsonify({
@@ -501,6 +509,7 @@ async def api_github_preview():
 
 
 @app.route("/api/analyze/unified", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'analyze_unified.yml'))
 async def api_analyze_unified():
     try:
         from models import UnifiedGithubPart, UnifiedResumePart, UnifiedGapPart
@@ -705,7 +714,7 @@ async def api_analyze_unified():
             summary=f"종합 커리어 진단: 기술일치도 {skill_match_pct}%, 활동 {active_weeks}주, 레포 {len(github_res.repo_details)}개"
         )
         db_history.insert(0, new_hist)
-        
+
         return jsonify(response.model_dump())
     except Exception as e:
         return jsonify({"detail": f"Unified career analysis failed: {str(e)}"}), 500
@@ -713,6 +722,7 @@ async def api_analyze_unified():
 # --- 암호화 미리보기 엔드포인트 ---
 
 @app.route("/api/encrypt-text", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'encrypt_text.yml'))
 def api_encrypt_text():
     try:
         data = request.get_json(force=True, silent=True) or {}
@@ -727,6 +737,7 @@ def api_encrypt_text():
 # --- Profile and History Session endpoints ---
 
 @app.route("/api/profile", methods=["GET"])
+@swag_from(os.path.join(_SW_DIR, 'profile_get.yml'))
 async def get_profile():
     try:
         profile = await _get_profile_from_db()
@@ -736,6 +747,7 @@ async def get_profile():
     return jsonify(profile.model_dump())
 
 @app.route("/api/profile", methods=["POST"])
+@swag_from(os.path.join(_SW_DIR, 'profile_post.yml'))
 async def update_profile():
     try:
         data = request.get_json(force=True, silent=True)
@@ -750,10 +762,12 @@ async def update_profile():
         return jsonify({"detail": f"Profile update failed: {str(e)}"}), 400
 
 @app.route("/api/history", methods=["GET"])
+@swag_from(os.path.join(_SW_DIR, 'history_get.yml'))
 async def get_history():
     return jsonify([item.model_dump() for item in db_history])
 
 @app.route("/api/history/<id>", methods=["DELETE"])
+@swag_from(os.path.join(_SW_DIR, 'history_delete.yml'))
 async def delete_history_item(id):
     global db_history
     db_history = [item for item in db_history if item.id != id]

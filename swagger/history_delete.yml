@@ -1,0 +1,25 @@
+tags:
+  - name: History
+summary: 분석 히스토리 항목 삭제
+description: 특정 히스토리 항목을 ID로 삭제합니다.
+produces:
+  - application/json
+parameters:
+  - name: id
+    in: path
+    type: string
+    required: true
+    description: 삭제할 히스토리 항목 ID
+    example: "hist-abc123"
+responses:
+  200:
+    description: 삭제 성공
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        message:
+          type: string
+          example: "History item deleted"
