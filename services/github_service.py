@@ -56,6 +56,9 @@ PACKAGE_KEYWORDS = {
     "vite": None,
     "webpack": None,
     "java":"Java",
+    "aws":"AWS",
+    "azure":"Azure",
+    "gcp":"GCP",
 }
 
 
