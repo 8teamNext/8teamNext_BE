@@ -25,23 +25,27 @@ def build_prompt(
     languages: dict[str, float],
     topics: list[str],
     package_skills: list[str],
+    readme_text: str = "",
 ) -> str:
     top_langs = list(languages.items())[:5]
     lang_str = ", ".join([f"{lang} {ratio}%" for lang, ratio in top_langs])
     topic_str = ", ".join(topics[:10]) if topics else "없음"
     package_str = ", ".join(package_skills) if package_skills else "없음"
+    # README는 너무 길지 않게 앞 1500자만 프롬프트에 포함
+    readme_str = readme_text[:1500].strip() if readme_text else "없음"
     allowed_str = ", ".join(ALLOWED_SKILLS)
 
     return f"""당신은 GitHub 데이터를 분석해 개발자의 기술스택을 추론하는 전문가입니다.
 
 아래 규칙을 반드시 따르세요:
 1. confirmed: GitHub API에서 직접 확인된 언어만 포함
-2. inferred: 언어 비중, topics, package.json 의존성을 근거로 사용했을 가능성이 있는 프레임워크/라이브러리 포함
+2. inferred: 언어 비중, topics, package.json, README 의존성을 근거로 사용했을 가능성이 있는 프레임워크/라이브러리/인프라 포함
 3. 반드시 아래 허용 목록에 있는 기술만 사용할 것 (목록에 없는 기술은 절대 포함하지 말 것)
 4. package.json 의존성에 있는 기술은 적극적으로 inferred에 포함할 것
 5. topics에 언급된 기술도 적극적으로 inferred에 포함할 것
-6. inferred는 비어있지 않도록 최대한 추론할 것
-7. JSON만 반환할 것 (설명, 주석 없이)
+6. README에 Docker, AWS, GCP, Nginx, CI/CD, Kubernetes 등 인프라 키워드가 언급되면 inferred에 포함할 것
+7. inferred는 비어있지 않도록 최대한 추론할 것
+8. JSON만 반환할 것 (설명, 주석 없이)
 
 허용 기술 목록:
 {allowed_str}
@@ -50,30 +54,35 @@ def build_prompt(
 입력 언어: JavaScript 70.0%, CSS 30.0%
 입력 topics: react, redux
 입력 package.json: React, Redux
+입력 README: 없음
 출력: {{"confirmed": ["JavaScript"], "inferred": ["React"]}}
 
 예시 2)
 입력 언어: TypeScript 60.0%, JavaScript 30.0%, CSS 10.0%
 입력 topics: nextjs, vercel
 입력 package.json: Next.js, React, TypeScript
+입력 README: 없음
 출력: {{"confirmed": ["TypeScript", "JavaScript"], "inferred": ["Next.js", "React"]}}
 
 예시 3)
 입력 언어: Python 90.0%, Dockerfile 10.0%
 입력 topics: fastapi, docker
 입력 package.json: 없음
-출력: {{"confirmed": ["Python"], "inferred": ["FastAPI", "Docker"]}}
+입력 README: ## Deploy\nDocker Compose로 배포, AWS EC2 사용
+출력: {{"confirmed": ["Python"], "inferred": ["FastAPI", "Docker", "AWS"]}}
 
 예시 4)
 입력 언어: Java 80.0%, HTML 20.0%
 입력 topics: spring, jpa
 입력 package.json: 없음
-출력: {{"confirmed": ["Java"], "inferred": ["Spring Boot", "Spring"]}}
+입력 README: Jenkins CI/CD 파이프라인 구축, Nginx 리버스 프록시 설정
+출력: {{"confirmed": ["Java"], "inferred": ["Spring Boot", "Spring", "Nginx", "CI/CD"]}}
 
 실제 입력)
 입력 언어: {lang_str}
 입력 topics: {topic_str}
 입력 package.json: {package_str}
+입력 README: {readme_str}
 출력:"""
 
 
@@ -82,11 +91,12 @@ async def _call_llm(
     languages: dict[str, float],
     topics: list[str],
     package_skills: list[str],
+    readme_text: str = "",
 ) -> dict:
     api_key = os.getenv("OPENAI_API_KEY", "")
     client = AsyncOpenAI(api_key=api_key)
 
-    prompt = build_prompt(languages, topics, package_skills)
+    prompt = build_prompt(languages, topics, package_skills, readme_text)
 
     response = await client.chat.completions.create(
         model="gpt-4o-mini",
@@ -142,6 +152,7 @@ async def infer_skills(
     languages: dict[str, float],
     topics: list[str],
     package_skills: list[str] = [],
+    readme_text: str = "",
 ) -> dict:
     """
     username 단위 캐싱 적용
@@ -150,7 +161,7 @@ async def infer_skills(
     반환:
     {
         "confirmed": ["JavaScript", "TypeScript"],
-        "inferred": ["React", "Next.js"],
+        "inferred": ["React", "Next.js", "Docker"],
     }
     """
     # 캐시 확인
@@ -158,7 +169,7 @@ async def infer_skills(
         return _cache[username]
 
     try:
-        result = await _call_llm(languages, topics, package_skills)
+        result = await _call_llm(languages, topics, package_skills, readme_text)
         validated = _validate(result, languages, package_skills)
     except Exception:
         # LLM 실패 시 confirmed + package_skills 반환
