@@ -353,56 +353,28 @@ def parse_jobkorea_sync(url: str) -> JobInfo:
 async def parse_jobkorea(url: str) -> JobInfo:
     """
     비동기 버전. requests 우선 시도 → 실패 시 Playwright 폴백.
-
-    사용 예:
-        info = await parse_jobkorea("https://www.jobkorea.co.kr/Recruit/GI_Read/Do?Recd_No=...")
+    ENABLE_PLAYWRIGHT=false 환경변수로 Playwright를 비활성화할 수 있습니다 (저사양 서버용).
     """
-    # info = JobInfo(url=url)
-
-    # # 1차: requests (빠름, 가벼움)
-    # html = _fetch_with_requests(url)
-
-    # # 2차: Playwright (JS 렌더링 필요하거나 403 시)
-    # if not html:
-    #     html = await _fetch_with_playwright(url)
-
-    # if not html:
-    #     info.error = "페이지 로드 실패 (requests + Playwright 모두 실패)"
-    #     return info
-
-    # return _parse_html(html, url)
+    import os
     info = JobInfo(url=url)
 
-    html = await _fetch_with_playwright(url)
+    # 1차: requests (빠름, 가벼움 — ~수 MB)
+    html = _fetch_with_requests(url)
 
-    # html = _fetch_with_requests(url)
-
-    # if not html:
-    #     html = await _fetch_with_playwright(url)
+    # 2차: Playwright 폴백 (메모리 300~800MB 필요 — 환경변수로 제어)
+    if not html:
+        playwright_enabled = os.getenv("ENABLE_PLAYWRIGHT", "true").lower() != "false"
+        if playwright_enabled:
+            html = await _fetch_with_playwright(url)
+        else:
+            info.error = "채용공고 페이지를 불러오지 못했습니다 (403 또는 타임아웃)"
+            return info
 
     if not html:
         info.error = "페이지 로드 실패 (requests + Playwright 모두 실패)"
         return info
 
-    # 디버그용
-    # with open("debug.html", "w", encoding="utf-8") as f:
-    #     f.write(html)
-
-    # print("debug.html 생성 완료")
-
-    # print("지원자격:", "지원자격" in html)
-
-    # idx = html.find("지원자격")
-
-    #지원자격 주변내용 출력(디버깅)
-    # if idx != -1:
-    #     print("\n=== 지원자격 주변 내용 ===")
-    #     print(html[idx:idx+2000])
-
     return _parse_html(html, url)
-
-
-    # return _parse_html(html, url)
 
 
 # 실행 예시
