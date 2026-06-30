@@ -366,13 +366,9 @@ async def parse_jobkorea(url: str) -> JobInfo:
         playwright_enabled = os.getenv("ENABLE_PLAYWRIGHT", "true").lower() != "false"
         if playwright_enabled:
             html = await _fetch_with_playwright(url)
-        else:
-            info.error = "채용공고 페이지를 불러오지 못했습니다 (403 또는 타임아웃)"
+        if not html:
+            info.error = "페이지 로드 실패 (requests + Playwright 모두 실패)"
             return info
-
-    if not html:
-        info.error = "페이지 로드 실패 (requests + Playwright 모두 실패)"
-        return info
 
     return _parse_html(html, url)
 
